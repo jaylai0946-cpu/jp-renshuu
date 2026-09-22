@@ -1,0 +1,9 @@
+name = "jp-renshuu-sync"
+main = "worker.js"
+compatibility_date = "2026-08-27"
+
+# 部署前先跑 `npx wrangler kv namespace create SYNC`，把印出來的 id 填進來。
+# 這是日文練習本專用的 namespace，不要跟課表 App 共用同一個 id。
+[[kv_namespaces]]
+binding = "SYNC"
+id = "請填入你自己的 KV namespace id"
