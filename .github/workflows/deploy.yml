@@ -18,11 +18,14 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
 
-      - uses: actions/setup-node@v4
+      # cache 一定要明寫。setup-node v5 會因為 package.json 有 packageManager
+      # 欄位而自動開快取，但 v6 把自動快取縮到只剩 npm——拿掉這行的話，
+      # 之後升 v6 快取會安靜地失效。
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: pnpm
@@ -33,11 +36,10 @@ jobs:
       - run: pnpm test
       - run: pnpm build
 
-      # enablement: true 讓第一次部署時自動把 repo 的 Pages 打開，
-      # 不用先到 Settings → Pages 手動選 GitHub Actions
-      - uses: actions/configure-pages@v5
-        with:
-          enablement: true
+      # 新 repo 第一次部署前，要先到 Settings → Pages 把 Source 設成
+      # GitHub Actions。這一步沒辦法自動化：enablement: true 需要的建站
+      # 權限 GITHUB_TOKEN 沒有，會回 Resource not accessible by integration。
+      - uses: actions/configure-pages@v6
 
       - uses: actions/upload-pages-artifact@v3
         with:
