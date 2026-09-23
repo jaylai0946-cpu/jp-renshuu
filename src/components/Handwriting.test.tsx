@@ -171,6 +171,54 @@ describe('手寫分頁', () => {
     expect(screen.getByText('已寫 0 / 2 筆')).toBeInTheDocument()
   })
 
+  it('描寫模式：範本預設顯示，按鈕是「蓋住範本」而且真的會關掉', () => {
+    seed((s) => { s.settings.penOnly = false })
+    openWriting()
+    fireEvent.click(screen.getByRole('button', { name: '描寫' }))
+
+    // 描寫時範本本來就在，所以按鈕是「蓋住範本」不是「看答案」
+    const toggle = screen.getByRole('button', { name: '蓋住範本' })
+    fireEvent.click(toggle)
+    expect(screen.getByRole('button', { name: '顯示範本' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '顯示範本' }))
+    expect(screen.getByRole('button', { name: '蓋住範本' })).toBeInTheDocument()
+  })
+
+  it('默寫模式：範本預設藏著，按鈕是「看答案」', () => {
+    seed((s) => { s.settings.penOnly = false })
+    openWriting()
+    fireEvent.click(screen.getByRole('button', { name: '默寫' }))
+
+    fireEvent.click(screen.getByRole('button', { name: '看答案' }))
+    expect(screen.getByRole('button', { name: '收起答案' })).toBeInTheDocument()
+  })
+
+  it('換模式時範本的顯示狀態跟著重設', () => {
+    seed((s) => { s.settings.penOnly = false })
+    openWriting()
+    fireEvent.click(screen.getByRole('button', { name: '描寫' }))
+    fireEvent.click(screen.getByRole('button', { name: '蓋住範本' }))
+
+    fireEvent.click(screen.getByRole('button', { name: '默寫' }))
+    // 默寫預設藏著
+    expect(screen.getByRole('button', { name: '看答案' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '描寫' }))
+    // 回到描寫又預設顯示
+    expect(screen.getByRole('button', { name: '蓋住範本' })).toBeInTheDocument()
+  })
+
+  it('換字時範本的顯示狀態也跟著重設', () => {
+    seed((s) => { s.settings.penOnly = false })
+    openWriting()
+    fireEvent.click(screen.getByRole('button', { name: '默寫' }))
+    fireEvent.click(screen.getByRole('button', { name: '看答案' }))
+
+    fireEvent.click(screen.getByRole('button', { name: '寫好了，下一個' }))
+    expect(screen.getByRole('button', { name: '看答案' })).toBeInTheDocument()
+  })
+
   it('設定頁可以關掉只用 Apple Pencil', () => {
     render(<App />)
     fireEvent.click(screen.getByRole('button', { name: /紀錄/ }))

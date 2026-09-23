@@ -31,6 +31,12 @@ interface CellState {
 
 const emptyCell = (): CellState => ({ strokes: [], score: null })
 
+/** 同一顆按鈕在兩種模式的意思相反，文字要跟著換 */
+function ghostLabel(mode: WritingPadProps['mode'], showing: boolean): string {
+  if (mode === 'trace') return showing ? '蓋住範本' : '顯示範本'
+  return showing ? '收起答案' : '看答案'
+}
+
 /**
  * 多格原稿紙。一格一個字元——SPEC 要求拗音的小字（ゃゅょ）獨立佔一格。
  *
@@ -47,15 +53,22 @@ export function WritingPad({
 }: WritingPadProps) {
   const chars = useMemo(() => [...text], [text])
   const [cells, setCells] = useState<CellState[]>(() => chars.map(emptyCell))
-  const [revealed, setRevealed] = useState(false)
+  /**
+   * 範本要不要顯示。描寫模式預設開著，默寫模式預設關著。
+   *
+   * 所以同一顆按鈕在兩種模式的意思是相反的：默寫是「看答案」，
+   * 描寫是「蓋住範本」——描寫時範本本來就在，給一顆「看答案」等於死按鈕。
+   */
+  const [showGhost, setShowGhost] = useState(mode === 'trace')
   const [reported, setReported] = useState(false)
 
-  // 換字就整組重來
-  const [prevText, setPrevText] = useState(text)
-  if (text !== prevText) {
-    setPrevText(text)
+  // 換字或換模式就整組重來
+  const resetKey = `${text}|${mode}`
+  const [prevKey, setPrevKey] = useState(resetKey)
+  if (resetKey !== prevKey) {
+    setPrevKey(resetKey)
     setCells(chars.map(emptyCell))
-    setRevealed(false)
+    setShowGhost(mode === 'trace')
     setReported(false)
   }
 
@@ -126,7 +139,7 @@ export function WritingPad({
             size={size}
             penOnly={penOnly}
             strokes={cells[i].strokes}
-            ghost={mode === 'trace' || revealed ? outlineFor(ch) : undefined}
+            ghost={showGhost ? outlineFor(ch) : undefined}
             verdicts={verdictsFor(cells[i], ch)}
             onStroke={(points) => addStroke(i, points)}
             onPenOnlyBlocked={onPenOnlyBlocked}
@@ -164,8 +177,8 @@ export function WritingPad({
         <button type="button" className="ghost" onClick={reset} disabled={!written}>
           清除
         </button>
-        <button type="button" className="ghost" onClick={() => setRevealed((v) => !v)}>
-          {revealed ? '收起答案' : '看答案'}
+        <button type="button" className="ghost" onClick={() => setShowGhost((v) => !v)}>
+          {ghostLabel(mode, showGhost)}
         </button>
       </div>
     </>
