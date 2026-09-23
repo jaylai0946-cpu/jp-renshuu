@@ -33,7 +33,12 @@ jobs:
       - run: pnpm test
       - run: pnpm build
 
+      # enablement: true 讓第一次部署時自動把 repo 的 Pages 打開，
+      # 不用先到 Settings → Pages 手動選 GitHub Actions
       - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
