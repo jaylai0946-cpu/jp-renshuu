@@ -57,7 +57,7 @@ describe('手寫分頁', () => {
     expect(screen.getByLabelText('手寫區')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: '默寫' }))
-    expect(screen.getByText('只給羅馬拼音，從記憶寫出來')).toBeInTheDocument()
+    expect(screen.getByText(/只給羅馬拼音/)).toBeInTheDocument()
   })
 
   it('默寫模式只顯示羅馬拼音，不露出假名', () => {
@@ -76,11 +76,16 @@ describe('手寫分頁', () => {
     expect(screen.getByText(/第 2 \/ 46 個\s+這個字 2 筆/)).toBeInTheDocument()
   })
 
-  it('拗音單元把兩個字拆開來練，小字獨立一格', () => {
+  it('拗音一題兩格，小字獨立佔一格', () => {
     openWriting()
     fireEvent.click(screen.getByRole('button', { name: '平假名 拗音' }))
-    // きゃ きゅ きょ… 拆成 き し ち に ひ み り ぎ じ び ぴ + ゃ ゅ ょ = 14 個字元
-    expect(screen.getByText(/第 1 \/ 14 個/)).toBeInTheDocument()
+    // 33 個拗音，每個是一題
+    expect(screen.getByText(/第 1 \/ 33 個/)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '描寫' }))
+    // きゃ = き（4 筆）+ ゃ（3 筆），兩個畫布
+    expect(screen.getAllByLabelText('手寫區')).toHaveLength(2)
+    expect(screen.getByText('已寫 0 / 7 筆')).toBeInTheDocument()
   })
 
   it('片假名單元練的是片假名', () => {

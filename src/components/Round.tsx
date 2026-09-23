@@ -1,13 +1,16 @@
 import { ITEMS, UNIT_BY_ID } from '../data/units'
 import type { RoundState } from '../useRound'
 import type { AppState, WordItem } from '../types'
+import type { Verdict } from '../lib/score'
 import { Cells } from './Cells'
+import { WritingPad } from './WritingPad'
 
 interface Props {
   round: RoundState
   state: AppState
   onLearn: () => void
   onAnswer: (choice: string) => void
+  onWrite: (verdict: Verdict) => void
   onNext: () => void
   onQuit: () => void
   onSay: () => void
@@ -20,7 +23,7 @@ const ASK: Record<string, string> = {
   zh2jp: '日文怎麼說？',
 }
 
-export function Round({ round, state, onLearn, onAnswer, onNext, onQuit, onSay }: Props) {
+export function Round({ round, state, onLearn, onAnswer, onWrite, onNext, onQuit, onSay }: Props) {
   const entry = round.queue[round.idx]
   const item = ITEMS[entry.id]
   const pct = (round.idx / round.queue.length) * 100
@@ -85,6 +88,40 @@ export function Round({ round, state, onLearn, onAnswer, onNext, onQuit, onSay }
             </button>
           </div>
         </div>
+      </>
+    )
+  }
+
+  // ---- 默寫題 ----
+  if (entry.kind === 'write') {
+    const text = item.t === 'kana' ? item.ch : item.kana
+    return (
+      <>
+        {top}
+        <p className="ask">
+          憑記憶寫出來
+          {item.t === 'kana' ? <span className="tag">默寫</span> : null}
+        </p>
+        <div className="romaji">{item.ro}</div>
+        <WritingPad
+          key={entry.id}
+          text={text}
+          mode="blind"
+          penOnly={state.settings.penOnly}
+          onJudged={onWrite}
+        />
+        {round.answered ? (
+          <>
+            <div className="feedback-spacer" />
+            <div className="feedback" role="status">
+              <div className="in">
+                <button type="button" className="primary" onClick={onNext}>
+                  繼續
+                </button>
+              </div>
+            </div>
+          </>
+        ) : null}
       </>
     )
   }

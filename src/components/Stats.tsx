@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { BATCH_SIZE_CHOICES, NEW_PER_DAY_CHOICES } from '../constants'
+import { BATCH_SIZE_CHOICES, NEW_PER_DAY_CHOICES, WRITE_PER_DAY_CHOICES } from '../constants'
 import { ITEMS } from '../data/units'
 import { addDays } from '../lib/dates'
 import { importLegacy } from '../lib/legacyImport'
@@ -152,6 +152,24 @@ export function Stats({ state, today, sync, onSetting, onReplaceState, onAbout }
               aria-label="單字題顯示羅馬拼音"
               onClick={() => onSetting('romaji', !state.settings.romaji)}
             />
+          </div>
+          <div className="set">
+            <label htmlFor="wpd">
+              每天幾題默寫
+              <br />
+              <small className="muted">辨識熟了的字才會出。0 是關掉</small>
+            </label>
+            <select
+              id="wpd"
+              value={state.settings.writePerDay}
+              onChange={(e) => onSetting('writePerDay', Number(e.target.value))}
+            >
+              {WRITE_PER_DAY_CHOICES.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
           </div>
           <div className="set">
             <span>

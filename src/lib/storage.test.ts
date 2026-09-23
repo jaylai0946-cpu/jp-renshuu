@@ -51,3 +51,58 @@ describe('storage', () => {
     expect(result.ok).toBe(false)
   })
 })
+
+describe('migration v1 -> v2', () => {
+  beforeEach(() => localStorage.clear())
+
+  it('v1 的 writePerDay 0 是被鎖住的預設值，升級時打開默寫題', () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ version: 1, items: {}, write: {}, hist: {}, settings: { writePerDay: 0, newPerDay: 15 } }),
+    )
+    const state = loadState()
+    expect(state.settings.writePerDay).toBe(5)
+    // 其他設定不動
+    expect(state.settings.newPerDay).toBe(15)
+    expect(state.version).toBe(2)
+  })
+
+  it('v1 沒有 writePerDay 欄位也補上', () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ version: 1, items: {}, hist: {}, settings: { newPerDay: 5 } }),
+    )
+    expect(loadState().settings.writePerDay).toBe(5)
+  })
+
+  it('v2 使用者自己關掉的 0 不會被改回來', () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ version: 2, items: {}, write: {}, hist: {}, settings: { writePerDay: 0 } }),
+    )
+    expect(loadState().settings.writePerDay).toBe(0)
+  })
+
+  it('Artifact 版（用 v 當版本欄位）也吃得到 migration', () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ v: 1, items: {}, hist: {}, settings: { newPerDay: 10 } }),
+    )
+    expect(loadState().settings.writePerDay).toBe(5)
+  })
+
+  it('進度本身不會被 migration 動到', () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        version: 1,
+        items: { 'h:あ': { b: 4, due: '2030-01-01', seen: 6, wrong: 1 } },
+        hist: { '2026-09-22': { n: 12, c: 10, xp: 110, w: 0, h: 0 } },
+        settings: {},
+      }),
+    )
+    const state = loadState()
+    expect(state.items['h:あ']).toEqual({ b: 4, due: '2030-01-01', seen: 6, wrong: 1 })
+    expect(state.hist['2026-09-22'].n).toBe(12)
+  })
+})

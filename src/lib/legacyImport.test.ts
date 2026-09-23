@@ -47,7 +47,7 @@ describe('importLegacy', () => {
     expect(r.state.settings).toMatchObject({ newPerDay: 15, romaji: false, sound: true })
     // 舊版沒有這兩個
     expect(r.state.settings.penOnly).toBe(true)
-    expect(r.state.settings.writePerDay).toBe(0)
+    expect(r.state.settings.writePerDay).toBe(5)
   })
 
   it('今天的新字額度跟著搬，不會又重新給 10 個', () => {

@@ -26,17 +26,35 @@ export function isPristine(state: AppState): boolean {
 }
 
 /**
- * 舊版資料升級。目前只有 v1，之後改形狀時在這裡往下接：
- *   if (version < 2) { ...; version = 2 }
+ * 舊版資料升級。之後改形狀時在這裡往下接。
  */
 function migrate(raw: Record<string, unknown>): Record<string, unknown> {
   // Artifact 版用 v 當版本欄位，新版用 version。兩個都認。
-  const version = typeof raw.version === 'number' ? raw.version : typeof raw.v === 'number' ? raw.v : 0
+  const version =
+    typeof raw.version === 'number' ? raw.version : typeof raw.v === 'number' ? raw.v : 0
+
   if (version > SCHEMA_VERSION) {
     // 另一台裝置跑著更新的版本。不猜它的形狀，交給 validate 盡量撈能用的欄位。
     return raw
   }
-  return raw
+
+  let next = raw
+
+  /*
+   * v1 -> v2：手寫判分做好了，把每日默寫題打開。
+   *
+   * v1 時代手寫還沒有 UI，writePerDay 被鎖在 0 而且設定裡看不到，
+   * 所以「0」一定是預設值不是使用者的選擇，可以安全地改成 5。
+   */
+  if (version < 2) {
+    const settings = typeof next.settings === 'object' && next.settings !== null ? next.settings : {}
+    const writePerDay = (settings as Record<string, unknown>).writePerDay
+    if (writePerDay === 0 || writePerDay === undefined) {
+      next = { ...next, settings: { ...settings, writePerDay: DEFAULT_SETTINGS.writePerDay } }
+    }
+  }
+
+  return next
 }
 
 export function loadState(): AppState {

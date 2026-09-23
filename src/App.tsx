@@ -10,7 +10,7 @@ import { Summary } from './components/Summary'
 import { Units } from './components/Units'
 import { SyncPanel } from './components/SyncPanel'
 import { UNIT_BY_ID } from './data/units'
-import { applyProgressPatch, setSetting } from './lib/actions'
+import { answerWriting, applyProgressPatch, setSetting } from './lib/actions'
 import { ymd } from './lib/dates'
 import { markKnownPatch } from './lib/srs'
 import { parseSetupLink } from './lib/sync'
@@ -20,9 +20,6 @@ import { warmUpSpeech } from './lib/speech'
 import type { AppState } from './types'
 import { useRound } from './useRound'
 import { useSync } from './useSync'
-
-/** 手寫畫布要到階段 2 才有；在那之前不要排默寫題，不然會出一題沒有畫面的題目。 */
-const HANDWRITING_ENABLED = false
 
 type View = TabId | 'about'
 
@@ -67,12 +64,7 @@ export default function App() {
     }
   }, [enableSync])
 
-  // 階段 2 之前把默寫題關掉，其他邏輯照常
-  const roundState: AppState = HANDWRITING_ENABLED
-    ? state
-    : { ...state, settings: { ...state.settings, writePerDay: 0 } }
-
-  const round = useRound(roundState, setState)
+  const round = useRound(state, setState)
 
   const go = useCallback(
     (tab: View) => {
@@ -105,6 +97,7 @@ export default function App() {
           state={state}
           onLearn={round.learn}
           onAnswer={round.answer}
+          onWrite={round.write}
           onNext={round.next}
           onQuit={round.quit}
           onSay={round.replay}
@@ -140,7 +133,7 @@ export default function App() {
 
       {view === 'home' ? (
         <Home
-          state={roundState}
+          state={state}
           today={today}
           onStart={() => start({ kind: 'daily' })}
           onExtra={() => start({ kind: 'extra' })}
@@ -157,7 +150,19 @@ export default function App() {
       ) : null}
 
       {view === 'write' ? (
-        <Handwriting state={state} onSetting={(k, v) => setState((s) => setSetting(s, k, v))} />
+        <Handwriting
+          state={state}
+          onSetting={(k, v) => setState((s) => setSetting(s, k, v))}
+          onWrite={(id, verdict) =>
+            setState((s) => {
+              // 在手寫分頁自由練習也算數，但只有「還沒寫過或今天到期」的才動盒子，
+              // 不然反覆寫同一個字會一路把盒子推到 6
+              const p = s.write[id]
+              const counts = !p || p.due <= ymd()
+              return answerWriting(s, id, verdict, counts, ymd())
+            })
+          }
+        />
       ) : null}
 
       {view === 'compose' ? <Compose hasGrader={false} /> : null}

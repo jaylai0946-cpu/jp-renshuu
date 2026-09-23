@@ -76,6 +76,7 @@ describe('App', () => {
   it('答對會顯示「答對了」，進度存下來', () => {
     seed((s) => {
       s.settings.newPerDay = 0
+      s.settings.writePerDay = 0
       s.items['h:あ'] = { b: 1, due: '2020-01-01', seen: 1, wrong: 0 }
     })
     render(<App />)
@@ -92,6 +93,7 @@ describe('App', () => {
   it('答錯會亮出正確答案，盒子掉回 1', () => {
     seed((s) => {
       s.settings.newPerDay = 0
+      s.settings.writePerDay = 0
       s.items['h:あ'] = { b: 5, due: '2020-01-01', seen: 9, wrong: 0 }
     })
     render(<App />)
@@ -110,6 +112,7 @@ describe('App', () => {
   it('答錯的題目會在回合尾巴再出一次', () => {
     seed((s) => {
       s.settings.newPerDay = 0
+      s.settings.writePerDay = 0
       s.items['h:あ'] = { b: 5, due: '2020-01-01', seen: 9, wrong: 0 }
     })
     render(<App />)
@@ -128,6 +131,7 @@ describe('App', () => {
   it('做完一回合會蓋章並顯示正確率', () => {
     seed((s) => {
       s.settings.newPerDay = 0
+      s.settings.writePerDay = 0
       s.items['h:あ'] = { b: 1, due: '2020-01-01', seen: 1, wrong: 0 }
     })
     render(<App />)
@@ -243,12 +247,28 @@ describe('App', () => {
     expect(screen.getByText('進度存在這台裝置')).toBeInTheDocument()
   })
 
-  it('階段 1 不會出默寫題（手寫畫布還沒做）', () => {
+  it('辨識熟了之後每日練習會出默寫題', () => {
     seed((s) => {
       s.settings.newPerDay = 0
-      s.settings.writePerDay = 10
+      s.settings.writePerDay = 3
       for (const it of UNIT_BY_ID['h1'].items) {
         s.items[it.id] = { b: 3, due: '2030-01-01', seen: 3, wrong: 0 }
+      }
+    })
+    render(<App />)
+    expect(screen.getByText('今天有 3 題')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '開始今日練習' }))
+    expect(screen.getByText('憑記憶寫出來')).toBeInTheDocument()
+    expect(screen.getByLabelText('手寫區')).toBeInTheDocument()
+  })
+
+  it('辨識還沒到盒子 2 的字不會出默寫題', () => {
+    seed((s) => {
+      s.settings.newPerDay = 0
+      s.settings.writePerDay = 5
+      for (const it of UNIT_BY_ID['h1'].items) {
+        s.items[it.id] = { b: 1, due: '2030-01-01', seen: 1, wrong: 0 }
       }
     })
     render(<App />)

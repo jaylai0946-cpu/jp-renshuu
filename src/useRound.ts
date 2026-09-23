@@ -1,7 +1,14 @@
 import { useCallback, useState } from 'react'
 import { ITEMS } from './data/units'
-import { XP_FIRST_CORRECT, XP_RETRY_CORRECT, answerQuestion, learnNew } from './lib/actions'
+import {
+  XP_FIRST_CORRECT,
+  XP_RETRY_CORRECT,
+  answerQuestion,
+  answerWriting,
+  learnNew,
+} from './lib/actions'
 import { ymd } from './lib/dates'
+import type { Verdict } from './lib/score'
 import { speak } from './lib/speech'
 import {
   buildRound,
@@ -144,6 +151,30 @@ export function useRound(state: AppState, setState: (fn: (s: AppState) => AppSta
     [round, setState, state.settings.sound],
   )
 
+  /**
+   * 默寫題評完。
+   *
+   * 手寫沒有「補考」——重寫一次的成本比按一個選項高太多，硬塞會讓人不想寫。
+   * 答錯就交給間隔複習明天再來。
+   */
+  const write = useCallback(
+    (verdict: Verdict) => {
+      if (!round || round.answered) return
+      const { id } = round.queue[round.idx]
+      const isFirst = !(id in round.first)
+
+      setState((s) => answerWriting(s, id, verdict, isFirst, ymd()))
+
+      setRound({
+        ...round,
+        first: isFirst ? { ...round.first, [id]: verdict !== 'bad' } : round.first,
+        answered: true,
+        xp: round.xp + (verdict === 'ok' ? XP_FIRST_CORRECT : 0),
+      })
+    },
+    [round, setState],
+  )
+
   const next = useCallback(() => {
     if (round) advance(round, state)
   }, [advance, round, state])
@@ -161,5 +192,5 @@ export function useRound(state: AppState, setState: (fn: (s: AppState) => AppSta
 
   const clearSummary = useCallback(() => setSummary(null), [])
 
-  return { round, summary, start, learn, answer, next, quit, replay, clearSummary }
+  return { round, summary, start, learn, answer, write, next, quit, replay, clearSummary }
 }
