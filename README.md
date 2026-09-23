@@ -15,11 +15,12 @@ Apple Pencil 手寫練習和造句批改。
 | 階段 | 內容 | 狀態 |
 | --- | --- | --- |
 | 1 | 搬成 React PWA：單元、題型、間隔複習、同步、匯入匯出 | ✅ 完成 |
-| 2 | 手寫畫布：Apple Pencil、防手掌誤觸、看筆順動畫、描寫模式 | ⬜ 未開始 |
+| 2 | 手寫畫布：Apple Pencil、防手掌誤觸、看筆順動畫、描寫模式 | ✅ 完成 |
 | 3 | 自動判分（本機運算）、默寫題加進每日練習 | ⬜ 未開始 |
 | 4 | 造句批改：Worker 的 `/grade` 端點呼叫 Claude API | ⬜ 未開始 |
 
-手寫還沒做，所以設定裡看不到「每天幾題默寫」，每日練習也不會出默寫題。
+手寫畫布可以用了，但**判分還沒做**（階段 3）：寫完只會留在畫面上，不會記進熟練度，
+每日練習也還不會出默寫題。
 
 ## 開發
 
@@ -131,6 +132,49 @@ item 的 id 格式（`h:あ`、`k:ア`、`w:わたし`）新版原封不動沿�
 
 雲端那份存在你自己的 Cloudflare KV，key 是 `state:<密鑰>`。
 
+## 手寫練習
+
+「手寫」分頁有三種模式，都用 KanjiVG 的筆順資料：
+
+| 模式 | 做什麼 |
+| --- | --- |
+| 看筆順 | 動畫依序畫出每一筆，標出筆順編號和起筆點 |
+| 描寫 | 田字格裡有淡淡的範本，照著描 |
+| 默寫 | 只給羅馬拼音，從記憶寫出來 |
+
+拗音會拆成兩個字元分別練（きゃ 練 き 和 ゃ），小字獨立佔一格。第一版只練假名，
+漢字手寫還沒做。
+
+### iPad 與 Apple Pencil
+
+- 用 Pointer Events，靠 `pointerType === 'pen'` 認 Apple Pencil
+- 設定裡的「只用 Apple Pencil 書寫」預設**開啟**：手指和手掌碰到畫布不會留下痕跡。
+  沒有筆的裝置第一次用手指碰會跳出提示，一鍵關掉
+- `touch-action: none`，寫字時頁面不會跟著捲
+- `getCoalescedEvents()` 把兩次 move 之間被合併掉的取樣點補回來，線條才平順
+- `pressure` 改筆畫粗細；滑鼠和手指不回報壓力，給固定值
+- `devicePixelRatio` 縮放，Retina 上不糊
+- `pointercancel`（被系統手勢打斷）會把那一筆丟掉，不會卡住
+- 書寫途中不呼叫 `setState`：筆一秒送上百個點，每點 render 一次會掉幀。
+  移動時只把新的那一小段畫上去，整張重畫留給復原、清除、換字
+
+### 筆順資料怎麼來的
+
+`scripts/build-kanjivg.mjs` 從 KanjiVG 抓 App 用得到的 148 個假名，取出照筆順排的
+SVG path，產生 `src/data/strokes.json`（433 筆，41 KB）。
+
+產出物 commit 進 repo，CI 不連外網——KanjiVG 掛掉不該讓部署跟著失敗。要更新就跑：
+
+```bash
+pnpm strokes
+```
+
+腳本會檢查筆順編號連續、path 只用到支援的指令；有任何一個字抓不到就整批不寫出檔案。
+`src/lib/strokes.test.ts` 另外盯著 JSON 和 `handwritingChars()` 的清單一致。
+
+路徑解析自己寫在 `src/lib/path.ts`，沒有用瀏覽器的 `getPointAtLength()`——那個要有
+DOM，判分邏輯就沒辦法在 Node 裡單獨測。KanjiVG 的假名只用到 `M` 和 `c` 兩種指令。
+
 ## 間隔複習怎麼算
 
 | 盒子 | 0 | 1 | 2 | 3 | 4 | 5 | 6 |
@@ -153,17 +197,20 @@ src/
   lib/storage.ts       localStorage 存取與壞資料處理
   lib/validate.ts      所有外來資料的守門員
   lib/legacyImport.ts  吃 Artifact 版的 JSON
+  lib/path.ts          SVG path 解析、折線化、等距重新取樣
+  lib/strokes.ts       KanjiVG 筆順資料的存取與快取
   lib/sync.ts          同步的 HTTP 層
   useSync.ts           同步的狀態機（樂觀鎖、衝突、debounce）
   useRound.ts          一回合練習的狀態
   components/          畫面
 worker/                Cloudflare Worker（同步後端）
+scripts/build-kanjivg.mjs KanjiVG -> strokes.json
 scripts/make-icons.mjs 產生 PWA 圖示
 ```
 
 ## 資料來源與授權
 
-- 筆順資料（階段 2 開始用）：[KanjiVG](https://kanjivg.tagaini.net/)，
+- 筆順資料：[KanjiVG](https://kanjivg.tagaini.net/)，
   作者 Ulrich Apel，授權 [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/)。
   App 的「關於」頁有標示。
 - 字型：Klee One、Noto Sans TC，來自 Google Fonts，SIL Open Font License 1.1。

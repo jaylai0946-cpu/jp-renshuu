@@ -1,0 +1,177 @@
+import { fireEvent, render, screen } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import App from '../App'
+import { STORAGE_KEY } from '../constants'
+import { emptyState } from '../lib/storage'
+import type { AppState } from '../types'
+
+/**
+ * jsdom 沒有 canvas 2d context，也沒有 pointer capture。
+ * 補最少的 stub，讓元件掛得起來——真正的筆跡行為靠瀏覽器實測，不在這裡測。
+ */
+function stubCanvas() {
+  const ctx = {
+    setTransform: vi.fn(), clearRect: vi.fn(), beginPath: vi.fn(), moveTo: vi.fn(),
+    lineTo: vi.fn(), stroke: vi.fn(), arc: vi.fn(), fill: vi.fn(), save: vi.fn(),
+    restore: vi.fn(), lineCap: '', lineJoin: '', strokeStyle: '', fillStyle: '',
+    lineWidth: 0, globalAlpha: 1,
+  }
+  HTMLCanvasElement.prototype.getContext = vi.fn(() => ctx) as never
+  HTMLCanvasElement.prototype.setPointerCapture = vi.fn()
+  HTMLCanvasElement.prototype.releasePointerCapture = vi.fn()
+  HTMLCanvasElement.prototype.hasPointerCapture = vi.fn(() => false)
+  return ctx
+}
+
+function seed(mutate: (s: AppState) => void) {
+  const state = emptyState()
+  mutate(state)
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+}
+
+function openWriting() {
+  render(<App />)
+  fireEvent.click(screen.getByRole('button', { name: /手寫/ }))
+}
+
+describe('手寫分頁', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    window.location.hash = ''
+    stubCanvas()
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+    vi.spyOn(window, 'requestAnimationFrame').mockReturnValue(0 as never)
+    vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => {})
+  })
+
+  it('預設從看筆順開始，第一個字是あ', () => {
+    openWriting()
+    expect(screen.getByText('動畫依序畫出每一筆，標出順序和起筆點')).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: 'あ 的筆順，共 3 筆' })).toBeInTheDocument()
+  })
+
+  it('三種模式切得動', () => {
+    openWriting()
+    fireEvent.click(screen.getByRole('button', { name: '描寫' }))
+    expect(screen.getByLabelText('手寫區')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '默寫' }))
+    expect(screen.getByText('只給羅馬拼音，從記憶寫出來')).toBeInTheDocument()
+  })
+
+  it('默寫模式只顯示羅馬拼音，不露出假名', () => {
+    openWriting()
+    fireEvent.click(screen.getByRole('button', { name: '默寫' }))
+    // 標題那格顯示的是 a 不是 あ
+    expect(screen.getByText('a')).toBeInTheDocument()
+  })
+
+  it('換字換單元都動得了，筆畫數跟著變', () => {
+    openWriting()
+    expect(screen.getByText(/第 1 \/ 46 個\s+這個字 3 筆/)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '下一個字' }))
+    // い 是 2 筆
+    expect(screen.getByText(/第 2 \/ 46 個\s+這個字 2 筆/)).toBeInTheDocument()
+  })
+
+  it('拗音單元把兩個字拆開來練，小字獨立一格', () => {
+    openWriting()
+    fireEvent.click(screen.getByRole('button', { name: '平假名 拗音' }))
+    // きゃ きゅ きょ… 拆成 き し ち に ひ み り ぎ じ び ぴ + ゃ ゅ ょ = 14 個字元
+    expect(screen.getByText(/第 1 \/ 14 個/)).toBeInTheDocument()
+  })
+
+  it('片假名單元練的是片假名', () => {
+    openWriting()
+    fireEvent.click(screen.getByRole('button', { name: '片假名 清音' }))
+    expect(screen.getByRole('img', { name: /ア 的筆順/ })).toBeInTheDocument()
+  })
+
+  it('penOnly 開著時手指碰畫布會提示，可以一鍵關掉', () => {
+    openWriting()
+    fireEvent.click(screen.getByRole('button', { name: '描寫' }))
+
+    const canvas = screen.getByLabelText('手寫區')
+    fireEvent.pointerDown(canvas, { pointerId: 1, pointerType: 'touch', clientX: 10, clientY: 10 })
+
+    expect(screen.getByText(/現在只收 Apple Pencil/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '改用手指寫' }))
+
+    const saved: AppState = JSON.parse(localStorage.getItem(STORAGE_KEY)!)
+    expect(saved.settings.penOnly).toBe(false)
+  })
+
+  it('關掉 penOnly 之後手指寫得出筆畫，復原和清除都有效', () => {
+    seed((s) => { s.settings.penOnly = false })
+    openWriting()
+    fireEvent.click(screen.getByRole('button', { name: '描寫' }))
+    const canvas = screen.getByLabelText('手寫區')
+
+    expect(screen.getByText('已寫 0 / 3 筆')).toBeInTheDocument()
+
+    for (const id of [1, 2]) {
+      fireEvent.pointerDown(canvas, { pointerId: id, pointerType: 'touch', clientX: 10, clientY: 10 })
+      fireEvent.pointerMove(canvas, { pointerId: id, pointerType: 'touch', clientX: 60, clientY: 20 })
+      fireEvent.pointerUp(canvas, { pointerId: id, pointerType: 'touch', clientX: 60, clientY: 20 })
+    }
+    expect(screen.getByText('已寫 2 / 3 筆')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '上一筆復原' }))
+    expect(screen.getByText('已寫 1 / 3 筆')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '清除' }))
+    expect(screen.getByText('已寫 0 / 3 筆')).toBeInTheDocument()
+  })
+
+  it('pointercancel（被系統手勢打斷）不會留下半截的筆畫', () => {
+    seed((s) => { s.settings.penOnly = false })
+    openWriting()
+    fireEvent.click(screen.getByRole('button', { name: '描寫' }))
+    const canvas = screen.getByLabelText('手寫區')
+
+    fireEvent.pointerDown(canvas, { pointerId: 1, pointerType: 'touch', clientX: 10, clientY: 10 })
+    fireEvent.pointerMove(canvas, { pointerId: 1, pointerType: 'touch', clientX: 60, clientY: 20 })
+    fireEvent.pointerCancel(canvas, { pointerId: 1, pointerType: 'touch' })
+
+    expect(screen.getByText('已寫 0 / 3 筆')).toBeInTheDocument()
+  })
+
+  it('第二根手指不會插隊畫出第二條線', () => {
+    seed((s) => { s.settings.penOnly = false })
+    openWriting()
+    fireEvent.click(screen.getByRole('button', { name: '描寫' }))
+    const canvas = screen.getByLabelText('手寫區')
+
+    fireEvent.pointerDown(canvas, { pointerId: 1, pointerType: 'touch', clientX: 10, clientY: 10 })
+    fireEvent.pointerDown(canvas, { pointerId: 2, pointerType: 'touch', clientX: 90, clientY: 90 })
+    fireEvent.pointerUp(canvas, { pointerId: 2, pointerType: 'touch', clientX: 90, clientY: 90 })
+    fireEvent.pointerUp(canvas, { pointerId: 1, pointerType: 'touch', clientX: 10, clientY: 10 })
+
+    expect(screen.getByText('已寫 1 / 3 筆')).toBeInTheDocument()
+  })
+
+  it('換字會把寫過的清掉，不會疊在新的字上', () => {
+    seed((s) => { s.settings.penOnly = false })
+    openWriting()
+    fireEvent.click(screen.getByRole('button', { name: '描寫' }))
+    const canvas = screen.getByLabelText('手寫區')
+
+    fireEvent.pointerDown(canvas, { pointerId: 1, pointerType: 'touch', clientX: 10, clientY: 10 })
+    fireEvent.pointerUp(canvas, { pointerId: 1, pointerType: 'touch', clientX: 10, clientY: 10 })
+    expect(screen.getByText('已寫 1 / 3 筆')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '寫好了，下一個' }))
+    expect(screen.getByText('已寫 0 / 2 筆')).toBeInTheDocument()
+  })
+
+  it('設定頁可以關掉只用 Apple Pencil', () => {
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: /紀錄/ }))
+    fireEvent.click(screen.getByRole('switch', { name: '只用 Apple Pencil 書寫' }))
+
+    const saved: AppState = JSON.parse(localStorage.getItem(STORAGE_KEY)!)
+    expect(saved.settings.penOnly).toBe(false)
+  })
+})

@@ -136,6 +136,21 @@ export function Stats({ state, today, sync, onSetting, onReplaceState, onAbout }
             />
           </div>
           <div className="set">
+            <span>
+              只用 Apple Pencil 書寫
+              <br />
+              <small className="muted">開著時手掌碰到畫布不會畫出線。沒有筆就關掉</small>
+            </span>
+            <button
+              type="button"
+              className={`toggle${state.settings.penOnly ? ' on' : ''}`}
+              role="switch"
+              aria-checked={state.settings.penOnly}
+              aria-label="只用 Apple Pencil 書寫"
+              onClick={() => onSetting('penOnly', !state.settings.penOnly)}
+            />
+          </div>
+          <div className="set">
             <span>答題後自動唸出來</span>
             <button
               type="button"

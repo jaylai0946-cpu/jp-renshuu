@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { About } from './components/About'
 import { Compose } from './components/Compose'
+import { Handwriting } from './components/Handwriting'
 import { Home } from './components/Home'
 import { Nav, type TabId } from './components/Nav'
 import { Round } from './components/Round'
@@ -153,6 +154,10 @@ export default function App() {
           onPractice={(unitId) => start({ kind: 'unit', unitId })}
           onMarkKnown={markKnown}
         />
+      ) : null}
+
+      {view === 'write' ? (
+        <Handwriting state={state} onSetting={(k, v) => setState((s) => setSetting(s, k, v))} />
       ) : null}
 
       {view === 'compose' ? <Compose hasGrader={false} /> : null}
