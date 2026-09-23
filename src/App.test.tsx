@@ -25,22 +25,52 @@ describe('App', () => {
 
   afterEach(() => vi.restoreAllMocks())
 
-  it('第一次開啟：提示從平假名開始，今天有 10 題', () => {
+  it('第一次開啟：預設每天 10 個新字，每個考兩次所以是 20 題', () => {
     render(<App />)
-    expect(screen.getByText('今天有 10 題')).toBeInTheDocument()
+    expect(screen.getByText('今天有 20 題')).toBeInTheDocument()
+    expect(screen.getByText(/先教 10 個新字/)).toBeInTheDocument()
     expect(screen.getByText(/從平假名開始/)).toBeInTheDocument()
     expect(screen.getByText('平假名・清音')).toBeInTheDocument()
   })
 
-  it('新字先出介紹卡，按「記住了」才出題', () => {
+  it('一次連續教一批（預設 5 個），教完才開始出題', () => {
     render(<App />)
     fireEvent.click(screen.getByRole('button', { name: '開始今日練習' }))
 
-    expect(screen.getByText('新しい字')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '記住了，出題吧' }))
+    // 前五項都是介紹卡
+    for (let i = 0; i < 5; i++) {
+      expect(screen.getByText('新しい字')).toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: '記住了，出題吧' }))
+    }
 
+    // 第六項才是題目
     expect(screen.queryByText('新しい字')).not.toBeInTheDocument()
     expect(screen.getByText('這個怎麼唸？')).toBeInTheDocument()
+  })
+
+  it('介紹過的字會被記進進度，額度跟著扣', () => {
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: '開始今日練習' }))
+    fireEvent.click(screen.getByRole('button', { name: '記住了，出題吧' }))
+
+    const saved: AppState = JSON.parse(localStorage.getItem(STORAGE_KEY)!)
+    expect(saved.items['h:あ']).toMatchObject({ b: 0 })
+    expect(saved.newDay).toEqual({ d: ymd(), n: 1 })
+  })
+
+  it('一次教幾個可以在設定裡改', () => {
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: /紀錄/ }))
+    fireEvent.change(screen.getByLabelText(/一次教幾個/), { target: { value: '3' } })
+
+    fireEvent.click(screen.getByRole('button', { name: /今日/ }))
+    fireEvent.click(screen.getByRole('button', { name: '開始今日練習' }))
+
+    for (let i = 0; i < 3; i++) {
+      expect(screen.getByText('新しい字')).toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: '記住了，出題吧' }))
+    }
+    expect(screen.queryByText('新しい字')).not.toBeInTheDocument()
   })
 
   it('答對會顯示「答對了」，進度存下來', () => {

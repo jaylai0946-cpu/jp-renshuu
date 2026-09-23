@@ -9,8 +9,21 @@ import { addDays, ymd } from './dates'
 export const INTERVALS = [0, 1, 2, 4, 8, 16, 32]
 export const MAX_BOX = 6
 
-/** 每日練習的複習題上限。新字會補進剩下的額度裡。 */
-export const MAX_REVIEW = 15
+/**
+ * 每日練習的複習題上限。
+ *
+ * 舊版是 15，而且新字要跟複習題搶這 15 格。改成分批之後兩者分開算，
+ * 一回合的題量本來就該多一點，所以拉到 20。
+ */
+export const MAX_REVIEW = 20
+
+/**
+ * 一批新字介紹完之後，每個字在那一批的題目裡出現幾次。
+ *
+ * 出兩次是刻意的：第一次是剛看完介紹卡的即時回想，第二次隔了幾題才回來，
+ * 中間夾著複習題，才測得出是真的記住還是短期殘留。
+ */
+export const DRILL_PER_NEW = 2
 /** 熟練度到這一格才開始出反向題（羅馬拼音→假名、中文→日文） */
 export const REVERSE_FROM_BOX = 2
 /** 辨識到這一格才開始出默寫題。SPEC：會認之後才練寫 */
@@ -117,15 +130,19 @@ export function writeDueIds(state: AppState, today: string): string[] {
   })
 }
 
-export interface QueueEntry {
-  id: string
-  /** 這題是第一次見到的新字，要先出介紹卡 */
-  isNew?: boolean
-  /** 答錯之後補在回合尾巴的那一題 */
-  retry?: boolean
-  /** 默寫題（手寫），不是選擇題 */
-  write?: boolean
-}
+/**
+ * 一回合裡的一個項目。
+ *
+ * intro 和 quiz 分成兩個項目，不再像舊版擠在同一個 entry 裡用旗標切換——
+ * 分批之後介紹卡要連續排在一起，出題排在後面，兩者不再一對一。
+ */
+export type QueueEntry =
+  /** 新字介紹卡：顯示字、讀音、意思並唸出來 */
+  | { kind: 'intro'; id: string }
+  /** 選擇題 */
+  | { kind: 'quiz'; id: string; retry?: boolean }
+  /** 默寫題（手寫）。階段 3 接上判分 */
+  | { kind: 'write'; id: string }
 
 export type RoundOptions =
   | { kind: 'daily' }
@@ -142,6 +159,8 @@ export function buildRound(
   today: string,
   rand: Rng = Math.random,
 ): QueueEntry[] {
+  if (opt.kind === 'daily') return buildDaily(state, today, rand)
+
   let review: string[] = []
   let fresh: string[] = []
   let writes: string[] = []
@@ -178,22 +197,74 @@ export function buildRound(
       Object.keys(state.items).filter((id) => ITEMS[id]),
       rand,
     ).slice(0, 10)
-  } else if (opt.kind === 'extra') {
-    fresh = nextNew(state, 5)
   } else {
-    review = dueIds(state, today).slice(0, MAX_REVIEW)
-    const quota = Math.max(0, state.settings.newPerDay - newToday(state, today))
-    fresh = nextNew(state, Math.min(quota, Math.max(0, MAX_REVIEW - review.length)))
-    // 默寫題不佔複習額度，自己另外算一份
-    writes = writeDueIds(state, today).slice(0, state.settings.writePerDay)
+    fresh = nextNew(state, 5)
   }
 
-  const queue: QueueEntry[] = [
-    ...review.map((id) => ({ id })),
-    ...fresh.map((id) => ({ id, isNew: true })),
-    ...writes.map((id) => ({ id, write: true })),
+  // 單元練習和「再學 5 個」也照分批：先連續介紹，再出題
+  return [
+    ...fresh.map((id): QueueEntry => ({ kind: 'intro', id })),
+    ...shuffle(
+      [
+        ...review.map((id): QueueEntry => ({ kind: 'quiz', id })),
+        ...fresh.map((id): QueueEntry => ({ kind: 'quiz', id })),
+        ...writes.map((id): QueueEntry => ({ kind: 'write', id })),
+      ],
+      rand,
+    ),
   ]
-  return shuffle(queue, rand)
+}
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size))
+  return out
+}
+
+/**
+ * 每日練習：一次教一批，教完集中考這批。
+ *
+ *   [介紹 あ い う え お] → [考這 5 個各 2 題 + 夾 5 題複習，打散]
+ *   [介紹 か き く け こ] → [考這 5 個各 2 題 + 夾 5 題複習，打散]
+ *   [剩下的複習題]
+ *
+ * 複習題平均分到每一批裡，不要全堆在最後——堆在最後的話前半段全是新字，
+ * 後半段全是舊字，兩邊都很單調。
+ */
+function buildDaily(state: AppState, today: string, rand: Rng): QueueEntry[] {
+  const review = dueIds(state, today).slice(0, MAX_REVIEW)
+  const quota = Math.max(0, state.settings.newPerDay - newToday(state, today))
+  const fresh = nextNew(state, quota)
+  const writes = writeDueIds(state, today).slice(0, state.settings.writePerDay)
+
+  const batches = chunk(fresh, Math.max(1, state.settings.batchSize))
+  const remaining = [...review]
+  // 複習題平均分給每一批，除不盡的留到最後
+  const perBatch = batches.length ? Math.floor(remaining.length / batches.length) : 0
+
+  const queue: QueueEntry[] = []
+  for (const batch of batches) {
+    for (const id of batch) queue.push({ kind: 'intro', id })
+
+    const block: QueueEntry[] = []
+    for (let round = 0; round < DRILL_PER_NEW; round++) {
+      for (const id of batch) block.push({ kind: 'quiz', id })
+    }
+    for (const id of remaining.splice(0, perBatch)) block.push({ kind: 'quiz', id })
+    queue.push(...shuffle(block, rand))
+  }
+
+  // 沒有新字時，複習題和默寫題就是全部；有新字時這裡是分不完的餘數
+  queue.push(
+    ...shuffle(
+      [
+        ...remaining.map((id): QueueEntry => ({ kind: 'quiz', id })),
+        ...writes.map((id): QueueEntry => ({ kind: 'write', id })),
+      ],
+      rand,
+    ),
+  )
+  return queue
 }
 
 export type QuestionMode = 'kana2ro' | 'ro2kana' | 'jp2zh' | 'zh2jp'
@@ -267,11 +338,21 @@ export function markKnownPatch(
   return patch
 }
 
-/** 首頁要顯示的「今天有幾題」。 */
+/**
+ * 首頁要顯示的「今天有幾題」。
+ * 新字會被考 DRILL_PER_NEW 次，所以題數不等於字數。
+ */
 export function todayCounts(state: AppState, today: string = ymd()) {
   const review = Math.min(dueIds(state, today).length, MAX_REVIEW)
   const quota = Math.max(0, state.settings.newPerDay - newToday(state, today))
-  const fresh = Math.min(quota, Math.max(0, MAX_REVIEW - review), nextNew(state, 99).length)
+  const fresh = Math.min(quota, nextNew(state, 99).length)
   const write = Math.min(writeDueIds(state, today).length, state.settings.writePerDay)
-  return { review, fresh, write, total: review + fresh + write }
+  return {
+    review,
+    /** 今天要學幾個新字 */
+    fresh,
+    write,
+    /** 實際會答幾題（介紹卡不算） */
+    questions: review + fresh * DRILL_PER_NEW + write,
+  }
 }

@@ -60,6 +60,7 @@ function settings(raw: unknown): Settings {
     sound: bool(r.sound, DEFAULT_SETTINGS.sound),
     penOnly: bool(r.penOnly, DEFAULT_SETTINGS.penOnly),
     writePerDay: int(r.writePerDay, DEFAULT_SETTINGS.writePerDay, 0, 30),
+    batchSize: int(r.batchSize, DEFAULT_SETTINGS.batchSize, 1, 20),
   }
 }
 

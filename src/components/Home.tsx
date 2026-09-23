@@ -24,11 +24,12 @@ export function Home({ state, today, onStart, onExtra, onRandom }: Props) {
       <div className="today">
         <Hanko glyph={String(days)} caption="連續天數" label={`連續 ${days} 天`} />
         <div>
-          {counts.total > 0 ? (
+          {counts.questions > 0 ? (
             <>
-              <h2>今天有 {counts.total} 題</h2>
+              <h2>今天有 {counts.questions} 題</h2>
               <p className="muted small">
-                複習 {counts.review} 題，新學 {counts.fresh} 個
+                {counts.fresh > 0 ? `先教 ${counts.fresh} 個新字，` : ''}
+                複習 {counts.review} 題
                 {counts.write > 0 ? `，默寫 ${counts.write} 題` : ''}
               </p>
             </>
@@ -43,7 +44,7 @@ export function Home({ state, today, onStart, onExtra, onRandom }: Props) {
         </div>
       </div>
 
-      {counts.total > 0 ? (
+      {counts.questions > 0 ? (
         <button type="button" className="primary" onClick={onStart}>
           開始今日練習
         </button>

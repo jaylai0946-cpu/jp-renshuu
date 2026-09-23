@@ -92,7 +92,7 @@ export function Round({ round, state, onLearn, onAnswer, onNext, onQuit, onSay }
   const q = round.q
   if (!q) return top
 
-  const tag = entry.retry ? <span className="tag">再一次</span> : null
+  const tag = entry.kind === 'quiz' && entry.retry ? <span className="tag">再一次</span> : null
   const choiceClass = q.mode === 'ro2kana' ? ' kana' : q.mode === 'zh2jp' ? ' word' : ''
   const ok = round.picked === q.answer
 

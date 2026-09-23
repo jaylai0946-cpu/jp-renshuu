@@ -22,7 +22,7 @@ export interface RoundState {
   answered: boolean
   picked: string | null
   q: Question | null
-  /** 這題是新字，先顯示介紹卡再出題 */
+  /** 這一項是介紹卡不是題目 */
   intro: boolean
 }
 
@@ -51,7 +51,7 @@ export function useRound(state: AppState, setState: (fn: (s: AppState) => AppSta
   const [round, setRound] = useState<RoundState | null>(null)
   const [summary, setSummary] = useState<RoundSummary | null>(null)
 
-  /** 準備第 idx 題：新字先出介紹卡，其餘直接出題。累計值由呼叫端帶進來。 */
+  /** 準備第 idx 項。累計值由呼叫端帶進來 */
   const prepare = useCallback(
     (
       current: AppState,
@@ -63,13 +63,35 @@ export function useRound(state: AppState, setState: (fn: (s: AppState) => AppSta
       const entry = queue[idx]
       const base = { queue, idx, first, xp, answered: false, picked: null }
 
-      if (entry.isNew === true && !current.items[entry.id]) {
+      if (entry.kind === 'intro') {
         if (current.settings.sound) setTimeout(() => speakItem(entry.id, true), 250)
         return { ...base, q: null, intro: true }
       }
+      // kind === 'write'（默寫）要到階段 3 才有畫布。在那之前 App 把
+      // writePerDay 鎖在 0，排不出這種題目
       return { ...base, q: makeQuestion(entry.id, current), intro: false }
     },
     [],
+  )
+
+  /** 往下一項；沒有下一項就結算。介紹卡和作答完都走這裡 */
+  const advance = useCallback(
+    (r: RoundState, current: AppState) => {
+      const idx = r.idx + 1
+      if (idx < r.queue.length) {
+        setRound(prepare(current, r.queue, idx, r.first, r.xp))
+        return
+      }
+      const ids = Object.keys(r.first)
+      setSummary({
+        n: ids.length,
+        c: ids.filter((id) => r.first[id]).length,
+        xp: r.xp,
+        streak: streak(current, ymd()),
+      })
+      setRound(null)
+    },
+    [prepare],
   )
 
   const start = useCallback(
@@ -83,13 +105,19 @@ export function useRound(state: AppState, setState: (fn: (s: AppState) => AppSta
     [prepare, state],
   )
 
+  /**
+   * 介紹卡按「記住了」：建立進度，然後進下一項。
+   *
+   * 舊版是在同一個項目裡把介紹卡換成題目。分批之後兩者是獨立項目——
+   * 先連續看完這一批的介紹卡，題目排在後面一起考。
+   */
   const learn = useCallback(() => {
-    if (!round || !round.intro) return
-    const id = round.queue[round.idx].id
+    if (!round?.intro) return
+    const { id } = round.queue[round.idx]
     setState((s) => learnNew(s, id, ymd()))
-    // learnNew 建的是盒子 0，反向題要盒子 2 才出，所以用當下的 state 出題結果一樣
-    setRound({ ...round, intro: false, q: makeQuestion(id, state) })
-  }, [round, setState, state])
+    // makeQuestion 讀不到進度就當盒子 0，所以這裡用舊的 state 出題結果一樣
+    advance(round, state)
+  }, [advance, round, setState, state])
 
   const answer = useCallback(
     (choice: string) => {
@@ -98,6 +126,7 @@ export function useRound(state: AppState, setState: (fn: (s: AppState) => AppSta
       const entry = round.queue[round.idx]
       const ok = choice === q.answer
       const isFirst = !(q.id in round.first)
+      const isRetry = entry.kind === 'quiz' && entry.retry === true
 
       setState((s) => answerQuestion(s, q.id, ok, isFirst, ymd()))
       speakItem(q.id, state.settings.sound)
@@ -105,7 +134,7 @@ export function useRound(state: AppState, setState: (fn: (s: AppState) => AppSta
       setRound({
         ...round,
         // 答錯就在回合尾巴再排一次，同一題不重複補考
-        queue: !ok && !entry.retry ? [...round.queue, { id: q.id, retry: true }] : round.queue,
+        queue: !ok && !isRetry ? [...round.queue, { kind: 'quiz', id: q.id, retry: true }] : round.queue,
         first: isFirst ? { ...round.first, [q.id]: ok } : round.first,
         answered: true,
         picked: choice,
@@ -116,21 +145,8 @@ export function useRound(state: AppState, setState: (fn: (s: AppState) => AppSta
   )
 
   const next = useCallback(() => {
-    if (!round) return
-    const idx = round.idx + 1
-    if (idx < round.queue.length) {
-      setRound(prepare(state, round.queue, idx, round.first, round.xp))
-      return
-    }
-    const ids = Object.keys(round.first)
-    setSummary({
-      n: ids.length,
-      c: ids.filter((id) => round.first[id]).length,
-      xp: round.xp,
-      streak: streak(state, ymd()),
-    })
-    setRound(null)
-  }, [prepare, round, state])
+    if (round) advance(round, state)
+  }, [advance, round, state])
 
   const quit = useCallback(() => {
     if (!round) return

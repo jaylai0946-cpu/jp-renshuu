@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { NEW_PER_DAY_CHOICES } from '../constants'
+import { BATCH_SIZE_CHOICES, NEW_PER_DAY_CHOICES } from '../constants'
 import { ITEMS } from '../data/units'
 import { addDays } from '../lib/dates'
 import { importLegacy } from '../lib/legacyImport'
@@ -118,6 +118,24 @@ export function Stats({ state, today, sync, onSetting, onReplaceState, onAbout }
               onChange={(e) => onSetting('newPerDay', Number(e.target.value))}
             >
               {NEW_PER_DAY_CHOICES.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="set">
+            <label htmlFor="batch">
+              一次教幾個
+              <br />
+              <small className="muted">連續介紹這麼多個新字，再集中出這批的題目</small>
+            </label>
+            <select
+              id="batch"
+              value={state.settings.batchSize}
+              onChange={(e) => onSetting('batchSize', Number(e.target.value))}
+            >
+              {BATCH_SIZE_CHOICES.map((n) => (
                 <option key={n} value={n}>
                   {n}
                 </option>

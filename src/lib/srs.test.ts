@@ -4,6 +4,7 @@ import type { AppState, Progress } from '../types'
 import { emptyState } from './storage'
 import {
   INTERVALS,
+  DRILL_PER_NEW,
   MAX_REVIEW,
   buildRound,
   currentUnit,
@@ -15,6 +16,7 @@ import {
   practiced,
   schedule,
   streak,
+  todayCounts,
   writeDueIds,
 } from './srs'
 
@@ -207,63 +209,124 @@ describe('makeQuestion', () => {
   })
 })
 
-describe('buildRound - 每日練習', () => {
-  it('複習題最多 15 題', () => {
+describe('buildRound - 每日練習分批', () => {
+  function daily(state: AppState, seed_ = 7) {
+    return buildRound(state, { kind: 'daily' }, TODAY, seeded(seed_))
+  }
+
+  function allDue(box = 1) {
     const state = emptyState()
     for (const it of UNIT_BY_ID['h1'].items) {
-      state.items[it.id] = { b: 1, due: '2026-09-01', seen: 1, wrong: 0 }
+      state.items[it.id] = { b: box, due: '2026-09-01', seen: 1, wrong: 0 }
     }
-    state.settings.newPerDay = 0
-    state.settings.writePerDay = 0
-    const queue = buildRound(state, { kind: 'daily' }, TODAY, seeded(7))
-    expect(queue).toHaveLength(MAX_REVIEW)
+    return state
+  }
+
+  it('新字先連續介紹一整批，才開始出題', () => {
+    const state = emptyState()
+    state.settings.newPerDay = 5
+    state.settings.batchSize = 5
+    const queue = daily(state)
+
+    expect(queue.slice(0, 5).every((e) => e.kind === 'intro')).toBe(true)
+    expect(queue[5].kind).toBe('quiz')
   })
 
-  it('沒有複習題時，新字補滿到每日上限', () => {
+  it('介紹卡的順序就是學習順序，不打散', () => {
+    const state = emptyState()
+    state.settings.newPerDay = 3
+    state.settings.batchSize = 3
+    const intros = daily(state).filter((e) => e.kind === 'intro')
+    expect(intros.map((e) => e.id)).toEqual(['h:あ', 'h:い', 'h:う'])
+  })
+
+  it('每個新字在那一批被考兩次', () => {
+    const state = emptyState()
+    state.settings.newPerDay = 3
+    state.settings.batchSize = 3
+    const quizzes = daily(state).filter((e) => e.kind === 'quiz')
+
+    expect(quizzes).toHaveLength(3 * DRILL_PER_NEW)
+    for (const id of ['h:あ', 'h:い', 'h:う']) {
+      expect(quizzes.filter((e) => e.id === id)).toHaveLength(DRILL_PER_NEW)
+    }
+  })
+
+  it('超過一批就分段：介紹→出題→介紹→出題', () => {
     const state = emptyState()
     state.settings.newPerDay = 10
-    state.settings.writePerDay = 0
-    const queue = buildRound(state, { kind: 'daily' }, TODAY, seeded(3))
-    expect(queue).toHaveLength(10)
-    expect(queue.every((q) => q.isNew)).toBe(true)
+    state.settings.batchSize = 5
+    const kinds = daily(state).map((e) => e.kind)
+
+    expect(kinds.slice(0, 5)).toEqual(Array(5).fill('intro'))
+    expect(kinds.slice(5, 15)).toEqual(Array(10).fill('quiz'))
+    expect(kinds.slice(15, 20)).toEqual(Array(5).fill('intro'))
+    expect(kinds.slice(20)).toEqual(Array(10).fill('quiz'))
+  })
+
+  it('batchSize 改了分段跟著改', () => {
+    const state = emptyState()
+    state.settings.newPerDay = 10
+    state.settings.batchSize = 10
+    const kinds = daily(state).map((e) => e.kind)
+    expect(kinds.slice(0, 10)).toEqual(Array(10).fill('intro'))
+    expect(kinds.slice(10)).toEqual(Array(20).fill('quiz'))
+  })
+
+  it('複習題平均分進每一批，不會全堆在最後', () => {
+    const state = allDue()
+    state.settings.newPerDay = 10
+    state.settings.batchSize = 5
+    const queue = daily(state)
+
+    // 兩批，各夾 10 題複習（MAX_REVIEW 20 / 2 批）
+    const firstBlock = queue.slice(5, queue.indexOf(queue.slice(6).find((e) => e.kind === 'intro')!))
+    const reviewInFirst = firstBlock.filter((e) => !['h:あ', 'h:い', 'h:う', 'h:え', 'h:お'].includes(e.id))
+    expect(reviewInFirst.length).toBeGreaterThan(0)
+  })
+
+  it('複習題最多 20 題', () => {
+    const state = allDue()
+    state.settings.newPerDay = 0
+    const queue = daily(state)
+    expect(queue).toHaveLength(MAX_REVIEW)
+    expect(queue.every((e) => e.kind === 'quiz')).toBe(true)
+  })
+
+  it('沒有新字時就是一整批複習題，沒有介紹卡', () => {
+    const state = allDue()
+    state.settings.newPerDay = 0
+    expect(daily(state).some((e) => e.kind === 'intro')).toBe(false)
   })
 
   it('今天學過的新字要從額度裡扣掉', () => {
     const state = emptyState()
     state.settings.newPerDay = 10
-    state.settings.writePerDay = 0
+    state.settings.batchSize = 5
     state.newDay = { d: TODAY, n: 7 }
-    expect(buildRound(state, { kind: 'daily' }, TODAY, seeded(3))).toHaveLength(3)
+    expect(daily(state).filter((e) => e.kind === 'intro')).toHaveLength(3)
   })
 
   it('昨天的額度不會延續到今天', () => {
     const state = emptyState()
     state.settings.newPerDay = 10
-    state.settings.writePerDay = 0
     state.newDay = { d: '2026-09-21', n: 10 }
-    expect(buildRound(state, { kind: 'daily' }, TODAY, seeded(3))).toHaveLength(10)
+    expect(daily(state).filter((e) => e.kind === 'intro')).toHaveLength(10)
   })
 
-  it('默寫題不佔複習額度，另外算', () => {
-    const state = emptyState()
-    for (const it of UNIT_BY_ID['h1'].items) {
-      state.items[it.id] = { b: 3, due: '2026-09-01', seen: 3, wrong: 0 }
-    }
+  it('默寫題不佔複習額度，排在最後', () => {
+    const state = allDue(3)
     state.settings.newPerDay = 0
     state.settings.writePerDay = 5
-    const queue = buildRound(state, { kind: 'daily' }, TODAY, seeded(11))
-    expect(queue.filter((q) => q.write)).toHaveLength(5)
-    expect(queue.filter((q) => !q.write)).toHaveLength(MAX_REVIEW)
+    const queue = daily(state)
+    expect(queue.filter((e) => e.kind === 'write')).toHaveLength(5)
+    expect(queue.filter((e) => e.kind === 'quiz')).toHaveLength(MAX_REVIEW)
   })
 
   it('writePerDay 設 0 就完全不出默寫題', () => {
-    const state = emptyState()
-    for (const it of UNIT_BY_ID['h1'].items) {
-      state.items[it.id] = { b: 3, due: '2026-09-01', seen: 3, wrong: 0 }
-    }
+    const state = allDue(3)
     state.settings.writePerDay = 0
-    const queue = buildRound(state, { kind: 'daily' }, TODAY, seeded(11))
-    expect(queue.filter((q) => q.write)).toHaveLength(0)
+    expect(daily(state).some((e) => e.kind === 'write')).toBe(false)
   })
 
   it('什麼都沒到期就回空陣列', () => {
@@ -272,7 +335,7 @@ describe('buildRound - 每日練習', () => {
       state.items[id] = { b: 6, due: '2026-12-31', seen: 9, wrong: 0 }
       state.write[id] = { b: 6, due: '2026-12-31', seen: 9, wrong: 0 }
     }
-    expect(buildRound(state, { kind: 'daily' }, TODAY, seeded(1))).toEqual([])
+    expect(daily(state)).toEqual([])
   })
 
   it('辨識都熟了但從沒練過手寫，還是會出默寫題', () => {
@@ -281,9 +344,35 @@ describe('buildRound - 每日練習', () => {
       state.items[id] = { b: 6, due: '2026-12-31', seen: 9, wrong: 0 }
     }
     state.settings.writePerDay = 5
-    const queue = buildRound(state, { kind: 'daily' }, TODAY, seeded(1))
+    const queue = daily(state)
     expect(queue).toHaveLength(5)
-    expect(queue.every((q) => q.write)).toBe(true)
+    expect(queue.every((e) => e.kind === 'write')).toBe(true)
+  })
+
+  it('batchSize 設 0 也不會無限迴圈', () => {
+    const state = emptyState()
+    state.settings.newPerDay = 3
+    state.settings.batchSize = 0
+    expect(daily(state).filter((e) => e.kind === 'intro')).toHaveLength(3)
+  })
+})
+
+describe('todayCounts', () => {
+  it('題數算進新字的兩次，介紹卡不算題', () => {
+    const state = emptyState()
+    state.settings.newPerDay = 5
+    const counts = todayCounts(state, TODAY)
+    expect(counts.fresh).toBe(5)
+    expect(counts.review).toBe(0)
+    expect(counts.questions).toBe(5 * DRILL_PER_NEW)
+  })
+
+  it('學完了就沒有新字', () => {
+    const state = emptyState()
+    for (const id of Object.keys(ITEMS)) {
+      state.items[id] = { b: 6, due: '2026-12-31', seen: 9, wrong: 0 }
+    }
+    expect(todayCounts(state, TODAY).fresh).toBe(0)
   })
 })
 
@@ -292,6 +381,16 @@ describe('buildRound - 單元練習', () => {
     const queue = buildRound(emptyState(), { kind: 'unit', unitId: 'v1' }, TODAY, seeded(5))
     expect(queue.length).toBeGreaterThan(0)
     for (const q of queue) expect(ITEMS[q.id].u).toBe('v1')
+  })
+
+  it('單元練習也是先介紹再出題', () => {
+    const kinds = buildRound(emptyState(), { kind: 'unit', unitId: 'v1' }, TODAY, seeded(5)).map(
+      (e) => e.kind,
+    )
+    const firstQuiz = kinds.indexOf('quiz')
+    expect(firstQuiz).toBeGreaterThan(0)
+    expect(kinds.slice(0, firstQuiz).every((k) => k === 'intro')).toBe(true)
+    expect(kinds.slice(firstQuiz).some((k) => k === 'intro')).toBe(false)
   })
 
   it('單元學完了就拿學過的來湊，不會只出兩題', () => {
