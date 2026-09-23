@@ -1,5 +1,11 @@
 import { useState } from 'react'
-import { describeState, generateKey, validateEndpoint, validateKey } from '../lib/sync'
+import {
+  buildSetupLink,
+  describeState,
+  generateKey,
+  validateEndpoint,
+  validateKey,
+} from '../lib/sync'
 import { syncStatusText } from '../lib/syncStatus'
 import type { AppState } from '../types'
 import type { useSync } from '../useSync'
@@ -15,6 +21,18 @@ export function SyncPanel({ sync, state }: Props) {
   const [key, setKey] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [showKey, setShowKey] = useState(false)
+  const [copied, setCopied] = useState<string | null>(null)
+
+  async function copy(text: string, note: string) {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(note)
+    } catch {
+      // Safari 在非使用者手勢或權限被擋時會失敗，那就叫出密鑰讓人自己選
+      setShowKey(true)
+      setCopied('複製不了，請自己長按選取下面的密鑰')
+    }
+  }
 
   function enable() {
     const endpointError = validateEndpoint(endpoint.trim())
@@ -127,6 +145,34 @@ export function SyncPanel({ sync, state }: Props) {
         <button type="button" className="ghost" onClick={() => setShowKey((v) => !v)}>
           {showKey ? '隱藏密鑰' : '顯示密鑰'}
         </button>
+      </div>
+
+      <div className="sec">
+        <h3>加第二台裝置</h3>
+        <p className="muted small">
+          複製設定連結，用 AirDrop 或訊息傳到另一台，在那台打開就會問要不要連上同步。
+          比手打 32 個字元快得多。
+        </p>
+        <div className="row">
+          <button
+            type="button"
+            className="ghost"
+            onClick={() => void copy(buildSetupLink(config), '設定連結已複製')}
+          >
+            複製設定連結
+          </button>
+          <button
+            type="button"
+            className="ghost"
+            onClick={() => void copy(config.key, '密鑰已複製')}
+          >
+            只複製密鑰
+          </button>
+        </div>
+        {copied ? <p className="muted small">{copied}</p> : null}
+        <p className="small" style={{ color: 'var(--bad)' }}>
+          連結裡含密鑰，等於憑證。只傳給自己，不要貼到群組或公開的地方。
+        </p>
       </div>
       <div className="row" style={{ marginTop: 10 }}>
         <button

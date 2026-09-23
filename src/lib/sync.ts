@@ -82,6 +82,36 @@ export function validateKey(key: string): string | null {
   return /^[a-z0-9]{32}$/.test(key) ? null : '密鑰必須是 32 個小寫英數字'
 }
 
+/**
+ * 把同步設定包成一個連結，用 AirDrop 或訊息傳給第二台裝置。
+ *
+ * 放在 # 後面而不是 query string，因為 hash 不會被送到伺服器，也不會留在
+ * 任何 access log 裡。連結裡有密鑰，等同於憑證，只能傳給自己。
+ */
+export function buildSetupLink(config: SyncConfig, base = location.href.split('#')[0]): string {
+  return `${base}#sync=${encodeURIComponent(config.endpoint)}|${config.key}`
+}
+
+/** 從網址的 hash 讀出同步設定。格式不對就回 null，不要讓亂貼的連結改到設定。 */
+export function parseSetupLink(hash: string): { endpoint: string; key: string } | null {
+  const raw = hash.replace(/^#/, '')
+  if (!raw.startsWith('sync=')) return null
+
+  const sep = raw.indexOf('|')
+  if (sep < 0) return null
+
+  let endpoint: string
+  try {
+    endpoint = decodeURIComponent(raw.slice('sync='.length, sep))
+  } catch {
+    return null
+  }
+  const key = raw.slice(sep + 1).trim()
+
+  if (validateEndpoint(endpoint) || validateKey(key)) return null
+  return { endpoint: endpoint.replace(/\/+$/, ''), key }
+}
+
 export function urlFor(config: SyncConfig, path = 's'): string {
   return `${config.endpoint.replace(/\/+$/, '')}/${path}/${config.key}`
 }

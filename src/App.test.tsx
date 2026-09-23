@@ -16,6 +16,7 @@ function seed(mutate: (s: AppState) => void) {
 describe('App', () => {
   beforeEach(() => {
     localStorage.clear()
+    window.location.hash = ''
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
     // 固定亂數：0.9 讓反向題不會隨機冒出來，題目順序也才穩定
@@ -165,6 +166,37 @@ describe('App', () => {
     expect(screen.getByText(/不是合法的 JSON/)).toBeInTheDocument()
     const saved: AppState = JSON.parse(localStorage.getItem(STORAGE_KEY)!)
     expect(saved.items['h:あ'].b).toBe(5)
+  })
+
+  it('設定連結會問要不要連上同步，並把密鑰從網址清掉', () => {
+    const key = 'a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6'
+    window.location.hash = `#sync=${encodeURIComponent('https://x.workers.dev')}|${key}`
+    const replace = vi.spyOn(window.history, 'replaceState')
+
+    render(<App />)
+
+    expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('https://x.workers.dev'))
+    expect(replace).toHaveBeenCalled()
+    // enable 之後同步設定就存下來了
+    const saved = JSON.parse(localStorage.getItem('jp-renshuu.sync')!)
+    expect(saved).toMatchObject({ endpoint: 'https://x.workers.dev', key })
+  })
+
+  it('拒絕設定連結時不會啟用同步', () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(false)
+    window.location.hash = `#sync=${encodeURIComponent('https://x.workers.dev')}|a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6`
+
+    render(<App />)
+
+    expect(localStorage.getItem('jp-renshuu.sync')).toBeNull()
+    expect(screen.getByText('進度存在這台裝置')).toBeInTheDocument()
+  })
+
+  it('亂七八糟的 hash 不會改到同步設定', () => {
+    window.location.hash = '#sync=http://不安全|太短'
+    render(<App />)
+    expect(window.confirm).not.toHaveBeenCalled()
+    expect(localStorage.getItem('jp-renshuu.sync')).toBeNull()
   })
 
   it('關於頁有 KanjiVG 的授權標示', () => {
