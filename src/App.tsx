@@ -10,7 +10,7 @@ import { Summary } from './components/Summary'
 import { Units } from './components/Units'
 import { SyncPanel } from './components/SyncPanel'
 import { UNIT_BY_ID } from './data/units'
-import { answerWriting, applyProgressPatch, setSetting } from './lib/actions'
+import { answerWriting, applyProgressPatch, recordGrade, setSetting } from './lib/actions'
 import { ymd } from './lib/dates'
 import { markKnownPatch } from './lib/srs'
 import { parseSetupLink } from './lib/sync'
@@ -165,7 +165,12 @@ export default function App() {
         />
       ) : null}
 
-      {view === 'compose' ? <Compose hasGrader={false} /> : null}
+      {view === 'compose' ? (
+        <Compose
+          config={sync.config}
+          onGraded={() => setState((s) => recordGrade(s, ymd()))}
+        />
+      ) : null}
 
       {view === 'stats' ? (
         <Stats

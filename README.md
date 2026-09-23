@@ -17,9 +17,9 @@ Apple Pencil 手寫練習和造句批改。
 | 1 | 搬成 React PWA：單元、題型、間隔複習、同步、匯入匯出 | ✅ 完成 |
 | 2 | 手寫畫布：Apple Pencil、防手掌誤觸、看筆順動畫、描寫模式 | ✅ 完成 |
 | 3 | 自動判分（本機運算）、默寫題加進每日練習 | ✅ 完成 |
-| 4 | 造句批改：Worker 的 `/grade` 端點呼叫 Claude API | ⬜ 未開始 |
+| 4 | 造句批改：Worker 的 `/grade` 端點呼叫 Claude API | ✅ 完成 |
 
-只剩造句批改還沒接（階段 4），其他都能用了。
+四個階段都完成了。
 
 ## 開發
 
@@ -110,6 +110,56 @@ https://jaylai0946-cpu.github.io/jp-renshuu/#sync=https%3A%2F%2F...workers.dev|<
 Worker 會回 409 並附上雲端現況，App 會問你要留哪一份，不會自己選。
 
 一邊沒改、另一邊改過的情況（最常見）不會跳衝突，直接同步。
+
+## 造句批改 ✍️
+
+「造句」分頁給你一句中文，你用日文寫寫看，Claude 批改。
+
+**API key 只放在 Cloudflare Worker 的 secret 裡，前端程式碼和 repo 裡都沒有。**
+前端只認得同步用的那組密鑰，連模型名稱都不知道。
+
+### 開通
+
+```bash
+cd worker
+npx wrangler secret put ANTHROPIC_API_KEY
+npx wrangler deploy
+```
+
+用網頁後台的話：Worker → **Settings** → **Variables and Secrets** → 新增一個
+**Secret**，名稱 `ANTHROPIC_API_KEY`，值貼上你的 API key → Deploy。
+
+沒設定的話「造句」分頁會說批改功能沒開，其他功能照常。
+
+### 防濫用
+
+API key 放在那裡，沒有上限就是把錢包交出去。三道關卡：
+
+1. **密鑰格式**要對（32 個小寫英數字）
+2. **這組密鑰要真的同步過進度**——光有格式擋不住「自己編一組密鑰來白嫖 API」
+3. **每組密鑰每天 50 次**，計數存在 KV（`grade:<密鑰>:<日期>`，兩天後自動消失）
+
+KV 不是強一致，同時打很多次會少算幾次。這是防濫用不是計費，可以接受。
+
+上游的錯誤**不會原封不動吐回前端**——那裡面可能有帳務或金鑰相關的訊息。
+
+### 成本
+
+用 `claude-haiku-4-5`（$1 / $5 每百萬 token）。一次批改約 400 輸入 + 250 輸出
+token，**約 US$0.0016**。每天 50 次的上限換算下來每月最多 US$2.4，實際會遠低於此。
+
+回傳格式用 **structured outputs**（`output_config.format`）保證符合 schema，
+不是在 prompt 裡拜託模型「只回 JSON」——那種寫法偶爾會夾雜開場白。
+
+### 沒有做的：把手寫的圖送去給 Claude 評字形
+
+技術上可行（canvas → base64 → Worker → image block），但沒做：
+
+1. 「字形美醜」這種細膩的視覺判斷，Haiku 4.5 大概給不出比本機判分更有用的回饋
+2. 要連網，跟「離線可用」衝突
+3. 本機判分已經能指出「第幾筆偏了」
+
+比較划算的做法是把每一筆的偏移量算出來、用本機規則產生具體提示，不用 AI。
 
 ## 從 claude.ai 的舊版搬進度
 
@@ -256,10 +306,11 @@ src/
   lib/score.ts         判分：筆數、起筆、形狀
   lib/thresholds.ts    判分門檻（筆／手指兩套，實測後調這裡）
   lib/sync.ts          同步的 HTTP 層
+  lib/grade.ts         呼叫 Worker 的批改端點
   useSync.ts           同步的狀態機（樂觀鎖、衝突、debounce）
   useRound.ts          一回合練習的狀態
   components/          畫面
-worker/                Cloudflare Worker（同步後端）
+worker/                Cloudflare Worker（同步 + 批改）
 scripts/build-kanjivg.mjs KanjiVG -> strokes.json
 scripts/make-icons.mjs 產生 PWA 圖示
 ```
@@ -274,6 +325,7 @@ scripts/make-icons.mjs 產生 PWA 圖示
 ## 沒有做的事
 
 - **沒有帳號系統**。密鑰就是全部的安全性。
+- **造句批改要連網**，而且要自己架 Worker 並放 API key。
 - **不支援多人**。這是一個人用的練習本。
 - **漢字手寫還沒做**。第一版只練假名；資料結構留了擴充空間。
 - **發音靠系統語音**（Web Speech API `ja-JP`）。沒有日文語音的裝置會唸得很怪。
