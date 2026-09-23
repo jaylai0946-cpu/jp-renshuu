@@ -65,8 +65,13 @@ export function saveSyncConfig(config: SyncConfig | null): void {
   }
 }
 
-/** 端點必須是 https，否則資料會用明文在網路上跑。localhost 例外，方便開發。 */
-export function validateEndpoint(endpoint: string): string | null {
+/**
+ * 端點必須是 https，否則資料會用明文在網路上跑。localhost 例外，方便開發。
+ *
+ * 也擋掉「填成 App 自己的網址」——這是最容易犯的錯：GitHub Pages 只會發
+ * 檔案，收到 PUT 會回 405，而「伺服器回 405」這種訊息看不出是填錯網址。
+ */
+export function validateEndpoint(endpoint: string, selfOrigin = currentOrigin()): string | null {
   let url: URL
   try {
     url = new URL(endpoint)
@@ -75,7 +80,18 @@ export function validateEndpoint(endpoint: string): string | null {
   }
   const local = url.hostname === 'localhost' || url.hostname === '127.0.0.1'
   if (url.protocol !== 'https:' && !local) return '必須是 https 網址，不然資料會用明文傳送'
+  if (selfOrigin && url.origin === selfOrigin) {
+    return '這是這個 App 自己的網址，不是同步伺服器。要填 Cloudflare Worker 的 .workers.dev 網址'
+  }
   return null
+}
+
+function currentOrigin(): string | null {
+  try {
+    return location.origin
+  } catch {
+    return null
+  }
 }
 
 export function validateKey(key: string): string | null {
@@ -114,6 +130,16 @@ export function parseSetupLink(hash: string): { endpoint: string; key: string } 
 
 export function urlFor(config: SyncConfig, path = 's'): string {
   return `${config.endpoint.replace(/\/+$/, '')}/${path}/${config.key}`
+}
+
+/** 同步伺服器的錯誤碼翻成看得懂的話。 */
+export function describeHttpError(status: number): string {
+  if (status === 405 || status === 404) {
+    return `這個網址不像同步伺服器（回 ${status}）。確認填的是 Cloudflare Worker 的 .workers.dev 網址`
+  }
+  if (status === 413) return '資料太大，伺服器不收'
+  if (status >= 500) return `同步伺服器出錯（${status}），等一下再試`
+  return `伺服器回 ${status}`
 }
 
 export interface RemoteRecord {
@@ -159,7 +185,7 @@ export async function pull(config: SyncConfig): Promise<PullResult> {
   try {
     const res = await fetch(urlFor(config), { method: 'GET', cache: 'no-store' })
     if (res.status === 404) return { status: 'empty' }
-    if (!res.ok) return { status: 'error', message: `伺服器回 ${res.status}` }
+    if (!res.ok) return { status: 'error', message: describeHttpError(res.status) }
 
     const body = await res.json()
     const state = adopt(body.state)
@@ -201,7 +227,7 @@ export async function push(config: SyncConfig, state: AppState): Promise<PushRes
       }
     }
 
-    if (!res.ok) return { status: 'error', message: `伺服器回 ${res.status}` }
+    if (!res.ok) return { status: 'error', message: describeHttpError(res.status) }
 
     const body = await res.json()
     return { status: 'ok', updatedAt: String(body.updatedAt) }

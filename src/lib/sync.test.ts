@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   buildSetupLink,
+  describeHttpError,
   generateKey,
   parseSetupLink,
   pull,
@@ -42,6 +43,30 @@ describe('validateEndpoint', () => {
 
   it('不是網址就擋掉', () => {
     expect(validateEndpoint('亂打')).toContain('網址格式')
+  })
+
+  it('填成 App 自己的網址會被擋（GitHub Pages 收 PUT 只會回 405）', () => {
+    const self = 'https://jaylai0946-cpu.github.io'
+    const msg = validateEndpoint(`${self}/jp-renshuu`, self)
+    expect(msg).toContain('App 自己的網址')
+    expect(msg).toContain('workers.dev')
+  })
+
+  it('同網域但不同 origin 的不受影響', () => {
+    expect(validateEndpoint('https://x.workers.dev', 'https://jaylai0946-cpu.github.io')).toBeNull()
+  })
+})
+
+describe('describeHttpError', () => {
+  it('405 和 404 提示是網址填錯，不是伺服器壞了', () => {
+    expect(describeHttpError(405)).toContain('workers.dev')
+    expect(describeHttpError(404)).toContain('workers.dev')
+  })
+
+  it('其他狀態碼照實說', () => {
+    expect(describeHttpError(413)).toContain('太大')
+    expect(describeHttpError(500)).toContain('等一下再試')
+    expect(describeHttpError(418)).toContain('418')
   })
 })
 
