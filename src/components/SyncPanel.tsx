@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import {
+  buildInviteLink,
   buildSetupLink,
   describeState,
   generateKey,
@@ -148,10 +149,10 @@ export function SyncPanel({ sync, state }: Props) {
       </div>
 
       <div className="sec">
-        <h3>加第二台裝置</h3>
+        <h3>我的另一台裝置</h3>
         <p className="muted small">
-          複製設定連結，用 AirDrop 或訊息傳到另一台，在那台打開就會問要不要連上同步。
-          比手打 32 個字元快得多。
+          複製設定連結，用 AirDrop 或訊息傳到自己的另一台，在那台打開就會問要不要連上
+          同一份進度。比手打 32 個字元快得多。
         </p>
         <div className="row">
           <button
@@ -169,11 +170,33 @@ export function SyncPanel({ sync, state }: Props) {
             只複製密鑰
           </button>
         </div>
-        {copied ? <p className="muted small">{copied}</p> : null}
         <p className="small" style={{ color: 'var(--bad)' }}>
-          連結裡含密鑰，等於憑證。只傳給自己，不要貼到群組或公開的地方。
+          這個連結裡含密鑰，等於憑證。只傳給自己，不要傳給別人。
         </p>
       </div>
+
+      <div className="sec">
+        <h3>分享給別人</h3>
+        <p className="muted small">
+          這個 App 沒有帳號系統——<strong>密鑰就是帳號</strong>。別人打開邀請連結會產生
+          自己的一組密鑰，進度跟你完全分開，互不影響。
+        </p>
+        <div className="row">
+          <button
+            type="button"
+            className="ghost"
+            onClick={() => void copy(buildInviteLink(config.endpoint), '邀請連結已複製')}
+          >
+            複製邀請連結（不含密鑰）
+          </button>
+        </div>
+        <p className="muted small">
+          對方會用你這台同步伺服器。造句批改也算在你的 API key 上，一人一天最多 50 次。
+        </p>
+      </div>
+
+      {copied ? <p className="muted small">{copied}</p> : null}
+
       <div className="row" style={{ marginTop: 10 }}>
         <button
           type="button"

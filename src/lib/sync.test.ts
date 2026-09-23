@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  buildInviteLink,
   buildSetupLink,
   describeHttpError,
   generateKey,
@@ -70,10 +71,11 @@ describe('describeHttpError', () => {
   })
 })
 
-describe('setup link', () => {
+describe('設定連結（自己的另一台裝置）', () => {
   it('帶得回原本的設定', () => {
     const link = buildSetupLink(CONFIG, BASE)
     expect(parseSetupLink(new URL(link).hash)).toEqual({
+      kind: 'sync',
       endpoint: CONFIG.endpoint,
       key: CONFIG.key,
     })
@@ -87,7 +89,8 @@ describe('setup link', () => {
 
   it('網址裡的特殊字元 encode 過', () => {
     const link = buildSetupLink({ ...CONFIG, endpoint: 'https://x.dev/a?b=1' }, BASE)
-    expect(parseSetupLink(new URL(link).hash)?.endpoint).toBe('https://x.dev/a?b=1')
+    const parsed = parseSetupLink(new URL(link).hash)
+    expect(parsed?.endpoint).toBe('https://x.dev/a?b=1')
   })
 
   it('尾巴多的斜線會清掉', () => {
@@ -98,7 +101,7 @@ describe('setup link', () => {
   it.each([
     ['', '沒有 hash'],
     ['#', '空的'],
-    ['#other=1', '不是同步連結'],
+    ['#other=1', '不是設定連結'],
     ['#sync=https://x.workers.dev', '沒有分隔符號'],
     ['#sync=https://x.workers.dev|短', '密鑰不合格'],
     ['#sync=http://x.workers.dev|a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6', 'http 不收'],
@@ -110,7 +113,42 @@ describe('setup link', () => {
 
   it('密鑰前後的空白會修掉（訊息軟體常自己加）', () => {
     const hash = `#sync=${encodeURIComponent(CONFIG.endpoint)}|${CONFIG.key} `
-    expect(parseSetupLink(hash)?.key).toBe(CONFIG.key)
+    const parsed = parseSetupLink(hash)
+    expect(parsed?.kind).toBe('sync')
+    expect(parsed?.kind === 'sync' && parsed.key).toBe(CONFIG.key)
+  })
+})
+
+describe('邀請連結（分享給別人）', () => {
+  it('只有網址，一個密鑰字元都不帶', () => {
+    const link = buildInviteLink(CONFIG.endpoint, BASE)
+    expect(link).not.toContain(CONFIG.key)
+    expect(link).toContain('#invite=')
+    expect(parseSetupLink(new URL(link).hash)).toEqual({
+      kind: 'invite',
+      endpoint: CONFIG.endpoint,
+    })
+  })
+
+  it('kind 分得出來，呼叫端不會把邀請當成設定連結用', () => {
+    const invite = parseSetupLink(new URL(buildInviteLink(CONFIG.endpoint, BASE)).hash)
+    const setup = parseSetupLink(new URL(buildSetupLink(CONFIG, BASE)).hash)
+    expect(invite?.kind).toBe('invite')
+    expect(setup?.kind).toBe('sync')
+  })
+
+  it('尾巴多的斜線會清掉', () => {
+    const link = buildInviteLink('https://x.workers.dev//', BASE)
+    expect(parseSetupLink(new URL(link).hash)?.endpoint).toBe('https://x.workers.dev')
+  })
+
+  it.each([
+    ['#invite=', '空網址'],
+    ['#invite=http://x.workers.dev', 'http 不收'],
+    ['#invite=亂打', '不是網址'],
+    ['#invite=%E0%A4%A', '壞掉的 encoding'],
+  ])('%s 不收（%s）', (hash) => {
+    expect(parseSetupLink(hash)).toBeNull()
   })
 })
 

@@ -226,6 +226,50 @@ describe('App', () => {
     expect(screen.getByText('進度存在這台裝置')).toBeInTheDocument()
   })
 
+  it('邀請連結會產生一組新密鑰，不是沿用別人的', () => {
+    window.location.hash = `#invite=${encodeURIComponent('https://x.workers.dev')}`
+    render(<App />)
+
+    expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('產生一組自己的密鑰'))
+    const saved = JSON.parse(localStorage.getItem('jp-renshuu.sync')!)
+    expect(saved.endpoint).toBe('https://x.workers.dev')
+    expect(saved.key).toMatch(/^[a-z0-9]{32}$/)
+  })
+
+  it('兩個人用同一個邀請連結會拿到不同的密鑰', () => {
+    const keys = new Set<string>()
+    for (let i = 0; i < 5; i++) {
+      localStorage.clear()
+      window.location.hash = `#invite=${encodeURIComponent('https://x.workers.dev')}`
+      const { unmount } = render(<App />)
+      keys.add(JSON.parse(localStorage.getItem('jp-renshuu.sync')!).key)
+      unmount()
+    }
+    expect(keys.size).toBe(5)
+  })
+
+  it('已經在同步的裝置點到邀請連結不會被重設', () => {
+    const mine = { endpoint: 'https://mine.workers.dev', key: 'b'.repeat(32), lastSeen: null, dirty: false }
+    localStorage.setItem('jp-renshuu.sync', JSON.stringify(mine))
+    const alert = vi.spyOn(window, 'alert').mockImplementation(() => {})
+
+    window.location.hash = `#invite=${encodeURIComponent('https://other.workers.dev')}`
+    render(<App />)
+
+    expect(alert).toHaveBeenCalled()
+    expect(JSON.parse(localStorage.getItem('jp-renshuu.sync')!)).toMatchObject({
+      endpoint: 'https://mine.workers.dev',
+      key: 'b'.repeat(32),
+    })
+  })
+
+  it('拒絕邀請連結時什麼都不設定', () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(false)
+    window.location.hash = `#invite=${encodeURIComponent('https://x.workers.dev')}`
+    render(<App />)
+    expect(localStorage.getItem('jp-renshuu.sync')).toBeNull()
+  })
+
   it('亂七八糟的 hash 不會改到同步設定', () => {
     window.location.hash = '#sync=http://不安全|太短'
     render(<App />)

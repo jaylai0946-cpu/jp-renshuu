@@ -13,7 +13,7 @@ import { UNIT_BY_ID } from './data/units'
 import { answerWriting, applyProgressPatch, recordGrade, setSetting } from './lib/actions'
 import { ymd } from './lib/dates'
 import { markKnownPatch } from './lib/srs'
-import { parseSetupLink } from './lib/sync'
+import { generateKey, parseSetupLink } from './lib/sync'
 import { syncStatusText } from './lib/syncStatus'
 import { loadState, saveState } from './lib/storage'
 import { warmUpSpeech } from './lib/speech'
@@ -46,23 +46,46 @@ export default function App() {
   const applyRemote = useCallback((next: AppState) => setState(next), [])
   const sync = useSync(state, applyRemote)
 
-  // 從另一台傳過來的設定連結（#sync=<網址>|<密鑰>）。
-  // 讀完就把 hash 清掉，免得一重新整理又問一次，也不要留在歷史紀錄裡。
+  /*
+   * 從 hash 讀設定連結。兩種：
+   *   #sync=<網址>|<密鑰>  自己的另一台裝置，連上同一份進度
+   *   #invite=<網址>       別人分享的，用同一台伺服器但產生自己的密鑰
+   *
+   * 讀完就把 hash 清掉，免得一重新整理又問一次，也不要留在歷史紀錄裡。
+   */
   const enableSync = sync.enable
+  const hasSync = sync.config !== null
   useEffect(() => {
     const setup = parseSetupLink(window.location.hash)
     if (!setup) return
     window.history.replaceState(null, '', window.location.pathname + window.location.search)
+
+    if (setup.kind === 'sync') {
+      if (
+        window.confirm(
+          `要把這台裝置連上同步嗎？\n\n伺服器：${setup.endpoint}\n\n` +
+            '這台目前的進度會跟雲端對一次；兩邊都改過的話會問你要留哪一份。',
+        )
+      ) {
+        enableSync(setup.endpoint, setup.key)
+      }
+      return
+    }
+
+    // 已經有自己的進度了就不要動它——重複點邀請連結不該把人重設
+    if (hasSync) {
+      window.alert('這台裝置已經在同步了，不用再設定一次。')
+      return
+    }
     if (
       window.confirm(
-        `要把這台裝置連上同步嗎？\n\n伺服器：${setup.endpoint}\n\n` +
-          '這台目前的進度會跟雲端對一次；兩邊都改過的話會問你要留哪一份。',
+        `要開始使用嗎？\n\n伺服器：${setup.endpoint}\n\n` +
+          '會幫你產生一組自己的密鑰，進度跟分享給你的人完全分開。',
       )
     ) {
-      // 不切分頁：啟用之後標題右邊的同步狀態馬上就會動，看得到
-      enableSync(setup.endpoint, setup.key)
+      enableSync(setup.endpoint, generateKey())
     }
-  }, [enableSync])
+  }, [enableSync, hasSync])
 
   const round = useRound(state, setState)
 

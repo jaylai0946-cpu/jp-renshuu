@@ -99,33 +99,71 @@ export function validateKey(key: string): string | null {
 }
 
 /**
- * 把同步設定包成一個連結，用 AirDrop 或訊息傳給第二台裝置。
+ * 把同步設定包成一個連結，用 AirDrop 或訊息傳給**自己的另一台裝置**。
  *
  * 放在 # 後面而不是 query string，因為 hash 不會被送到伺服器，也不會留在
  * 任何 access log 裡。連結裡有密鑰，等同於憑證，只能傳給自己。
  */
-export function buildSetupLink(config: SyncConfig, base = location.href.split('#')[0]): string {
+export function buildSetupLink(config: SyncConfig, base = currentBase()): string {
   return `${base}#sync=${encodeURIComponent(config.endpoint)}|${config.key}`
 }
 
-/** 從網址的 hash 讀出同步設定。格式不對就回 null，不要讓亂貼的連結改到設定。 */
-export function parseSetupLink(hash: string): { endpoint: string; key: string } | null {
+/**
+ * 邀請**別人**用的連結：只有伺服器網址，沒有密鑰。
+ *
+ * 對方打開之後會產生自己的一組密鑰，進度完全分開——KV 裡是兩筆不同的
+ * state:<密鑰>。這個 App 沒有帳號系統，密鑰就是帳號。
+ *
+ * 分成兩顆按鈕是刻意的：把含密鑰的連結傳給別人，等於把自己的進度交出去，
+ * 而且兩個人會開始互相覆蓋。
+ */
+export function buildInviteLink(endpoint: string, base = currentBase()): string {
+  return `${base}#invite=${encodeURIComponent(endpoint)}`
+}
+
+function currentBase(): string {
+  return location.href.split('#')[0]
+}
+
+export type SetupLink =
+  /** 自己的另一台裝置：連上同一份進度 */
+  | { kind: 'sync'; endpoint: string; key: string }
+  /** 別人的邀請：用同一台伺服器，但要產生自己的密鑰 */
+  | { kind: 'invite'; endpoint: string }
+
+/**
+ * 從網址的 hash 讀出設定。格式不對就回 null，不要讓亂貼的連結改到設定。
+ */
+export function parseSetupLink(hash: string): SetupLink | null {
   const raw = hash.replace(/^#/, '')
+
+  if (raw.startsWith('invite=')) {
+    const endpoint = decode(raw.slice('invite='.length))
+    if (endpoint === null || validateEndpoint(endpoint)) return null
+    return { kind: 'invite', endpoint: trimSlash(endpoint) }
+  }
+
   if (!raw.startsWith('sync=')) return null
 
   const sep = raw.indexOf('|')
   if (sep < 0) return null
 
-  let endpoint: string
+  const endpoint = decode(raw.slice('sync='.length, sep))
+  const key = raw.slice(sep + 1).trim()
+  if (endpoint === null || validateEndpoint(endpoint) || validateKey(key)) return null
+  return { kind: 'sync', endpoint: trimSlash(endpoint), key }
+}
+
+function decode(s: string): string | null {
   try {
-    endpoint = decodeURIComponent(raw.slice('sync='.length, sep))
+    return decodeURIComponent(s)
   } catch {
     return null
   }
-  const key = raw.slice(sep + 1).trim()
+}
 
-  if (validateEndpoint(endpoint) || validateKey(key)) return null
-  return { endpoint: endpoint.replace(/\/+$/, ''), key }
+function trimSlash(s: string): string {
+  return s.replace(/\/+$/, '')
 }
 
 export function urlFor(config: SyncConfig, path = 's'): string {
