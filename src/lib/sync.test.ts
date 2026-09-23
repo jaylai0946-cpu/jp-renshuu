@@ -1,8 +1,9 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   buildSetupLink,
   generateKey,
   parseSetupLink,
+  pull,
   validateEndpoint,
   validateKey,
 } from './sync'
@@ -85,5 +86,54 @@ describe('setup link', () => {
   it('密鑰前後的空白會修掉（訊息軟體常自己加）', () => {
     const hash = `#sync=${encodeURIComponent(CONFIG.endpoint)}|${CONFIG.key} `
     expect(parseSetupLink(hash)?.key).toBe(CONFIG.key)
+  })
+})
+
+describe('pull：擋掉別的 App 的資料', () => {
+  const CFG = { endpoint: 'https://x.workers.dev', key: 'a'.repeat(32), lastSeen: null, dirty: false }
+
+  function mockFetch(state: unknown) {
+    vi.stubGlobal('fetch', async () =>
+      new Response(JSON.stringify({ version: 1, updatedAt: '2026-09-23T00:00:00Z', state }), {
+        status: 200,
+      }),
+    )
+  }
+
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('課表的資料會被擋下來，不會被當成空白進度', async () => {
+    // mcu-schedule 的 AppState 長這樣
+    mockFetch({ version: 6, courses: [{ id: 'jpn' }], items: [], schoolEvents: [] })
+    const result = await pull(CFG)
+    expect(result.status).toBe('error')
+    if (result.status !== 'error') return
+    expect(result.message).toContain('課表')
+  })
+
+  it('items 是陣列（不是我們的形狀）也擋', async () => {
+    mockFetch({ items: [1, 2, 3] })
+    const result = await pull(CFG)
+    expect(result.status).toBe('error')
+  })
+
+  it('自己的資料照常收', async () => {
+    mockFetch({
+      version: 1,
+      items: { 'h:あ': { b: 3, due: '2026-09-25', seen: 4, wrong: 1 } },
+      write: {},
+      hist: {},
+      settings: {},
+      newDay: { d: '', n: 0 },
+    })
+    const result = await pull(CFG)
+    expect(result.status).toBe('ok')
+    if (result.status !== 'ok') return
+    expect(result.record.state.items['h:あ'].b).toBe(3)
+  })
+
+  it('雲端還是空的（404）回 empty，不是錯誤', async () => {
+    vi.stubGlobal('fetch', async () => new Response('{}', { status: 404 }))
+    expect((await pull(CFG)).status).toBe('empty')
   })
 })

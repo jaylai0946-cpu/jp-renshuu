@@ -126,8 +126,31 @@ export type PullResult =
   | { status: 'ok'; record: RemoteRecord }
   | { status: 'error'; message: string }
 
+/**
+ * 雲端那份是不是別的 App 的？
+ *
+ * 課表 App（mcu-schedule）用同一套 Worker 協定，差別只在密鑰。這代表
+ * 兩個 App 可以共用同一台 Worker——但也代表萬一兩邊填到同一組密鑰，
+ * 不擋的話會發生：拉回來的資料驗不過 → 變成空白 → 再把空白推上去，
+ * 把課表的進度洗掉。
+ *
+ * 所以認出不是自己的資料就直接報錯，讓 useSync 停在 error 不往下推。
+ */
+function foreignApp(raw: unknown): string | null {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return null
+  const r = raw as Record<string, unknown>
+  if (Array.isArray(r.courses)) return '課表'
+  // 這裡的 items 是「id -> 進度」的物件；課表的 items 是待辦陣列
+  if (Array.isArray(r.items)) return '別的 App'
+  return null
+}
+
 /** 雲端的資料同樣要過驗證，不能直接信。 */
 function adopt(raw: unknown): AppState | string {
+  const foreign = foreignApp(raw)
+  if (foreign) {
+    return `這組密鑰已經被「${foreign}」用了。換一組新的密鑰，不要蓋掉那邊的資料`
+  }
   const result = validateAppState(raw, ymd())
   return result.ok ? result.state : result.error
 }
