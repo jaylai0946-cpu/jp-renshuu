@@ -1,13 +1,13 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../App'
-import { STORAGE_KEY } from '../constants'
+import { DEFAULT_SYNC_ENDPOINT, STORAGE_KEY } from '../constants'
 import { deriveKey } from '../lib/account'
 import { emptyState } from '../lib/storage'
 import type { AppState } from '../types'
 
 const SYNC_KEY = 'jp-renshuu.sync'
-const ENDPOINT = 'https://jp-renshuu-sync.example.workers.dev'
+const ENDPOINT = DEFAULT_SYNC_ENDPOINT
 
 /** 雲端回 404 = 這組密鑰還沒有進度 */
 function cloudEmpty() {
@@ -27,7 +27,7 @@ function cloudHas(state: AppState = emptyState()) {
 }
 
 async function login(name: string, password: string) {
-  fireEvent.change(screen.getByLabelText('同步伺服器網址'), { target: { value: ENDPOINT } })
+  // 伺服器網址已經寫在 constants 裡，登入頁不會問
   fireEvent.change(screen.getByLabelText('名字'), { target: { value: name } })
   fireEvent.change(screen.getByLabelText('密碼'), { target: { value: password } })
   fireEvent.click(screen.getByRole('button', { name: '登入 / 建立' }))
@@ -137,14 +137,21 @@ describe('登入頁', () => {
     expect(storedKey()).toBeNull()
   })
 
-  it('伺服器網址沒填會擋', async () => {
+  it('伺服器網址已經內建，登入頁不再問', () => {
+    render(<App />)
+    expect(screen.queryByLabelText('同步伺服器網址')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('名字')).toBeInTheDocument()
+    expect(screen.getByLabelText('密碼')).toBeInTheDocument()
+  })
+
+  it('登入時打到內建的那台伺服器', async () => {
     cloudEmpty()
     render(<App />)
-    fireEvent.change(screen.getByLabelText('名字'), { target: { value: 'jay' } })
-    fireEvent.change(screen.getByLabelText('密碼'), { target: { value: 'hunter2hunter2' } })
-    fireEvent.click(screen.getByRole('button', { name: '登入 / 建立' }))
-    // 用錯誤訊息那一段找，'網址' 兩個字在欄位標籤上也有
-    await waitFor(() => expect(document.querySelector('.err')?.textContent).toMatch(/網址/))
+    await login('jay', 'hunter2hunter2')
+
+    await waitFor(() => expect(storedKey()).not.toBeNull())
+    const config = JSON.parse(localStorage.getItem(SYNC_KEY)!)
+    expect(config.endpoint).toBe(DEFAULT_SYNC_ENDPOINT)
   })
 
   it('選「先不同步」可以直接進去，而且記得住', () => {

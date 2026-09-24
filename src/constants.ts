@@ -29,4 +29,6 @@ export const BATCH_SIZE_CHOICES = [3, 5, 8, 10]
  * 這不是機密——機密是密鑰。可以直接寫死在這裡 commit 進 repo，
  * 或在建置時用 VITE_SYNC_ENDPOINT 蓋掉。留空的話登入頁會多一個欄位讓人自己填。
  */
-export const DEFAULT_SYNC_ENDPOINT: string = (import.meta.env.VITE_SYNC_ENDPOINT ?? '').trim()
+export const DEFAULT_SYNC_ENDPOINT: string = (
+  import.meta.env.VITE_SYNC_ENDPOINT ?? 'https://jp-renshuu-sync.jaylai0946.workers.dev'
+).trim()
