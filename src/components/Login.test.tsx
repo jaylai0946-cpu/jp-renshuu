@@ -213,13 +213,14 @@ describe('登出', () => {
 
   it('推送還在飛的時候登出，同步設定不會被寫回來', async () => {
     // 推送卡住，登出之後才失敗回來——CI 上就是這個時序把設定復活的
-    let failPush: (() => void) | null = null
+    // 放在物件裡：TS 對「只在 closure 裡賦值的區域變數」會收斂成 never
+    const gate: { release: (() => void) | null } = { release: null }
     vi.stubGlobal(
       'fetch',
       vi.fn(async (_url: string, init?: RequestInit) => {
         if (init?.method === 'PUT') {
           await new Promise<void>((resolve) => {
-            failPush = resolve
+            gate.release = resolve
           })
           return new Response('{}', { status: 500 })
         }
@@ -236,7 +237,7 @@ describe('登出', () => {
     await waitFor(() => expect(localStorage.getItem(SYNC_KEY)).toBeNull())
 
     // 現在才讓那個推送失敗回來
-    failPush?.()
+    gate.release?.()
     await new Promise((r) => setTimeout(r, 50))
 
     expect(localStorage.getItem(SYNC_KEY)).toBeNull()

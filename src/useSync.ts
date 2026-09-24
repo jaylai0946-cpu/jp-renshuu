@@ -28,8 +28,17 @@ export function useSync(state: AppState, applyRemote: (next: AppState) => void) 
     loadSyncConfig() ? { kind: 'idle', at: null } : { kind: 'off' },
   )
 
+  /*
+   * configRef 只由 commitConfig 寫（它是 setConfigState 的唯一呼叫處）。
+   *
+   * 刻意不在 render 期寫 configRef.current = config：那行會跟 commitConfig
+   * 的即時寫入打架。登出時 commitConfig(null) 先把 ref 清成 null，但只要
+   * 之後有任何一次 render 的 config state 還沒更新成 null（例如同時有
+   * setStatus 進來、兩次更新沒有被批在同一個 render），那行就會把舊設定
+   * 塞回 ref，接著 [state] 的 effect 讀到它、又 commitConfig 寫回
+   * localStorage——登出之後同步設定復活。
+   */
   const configRef = useRef(config)
-  configRef.current = config
   const stateRef = useRef(state)
   stateRef.current = state
   // 第一次進來還沒對過雲端，不要把本機當成「有改動」推上去
