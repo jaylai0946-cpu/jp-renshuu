@@ -16,6 +16,8 @@ function seed(mutate: (s: AppState) => void) {
 describe('App', () => {
   beforeEach(() => {
     localStorage.clear()
+    // 跳過登入頁：這些測試測的是登入之後的行為，登入本身在 Login.test.tsx
+    localStorage.setItem('jp-renshuu.local-only', '1')
     window.location.hash = ''
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     vi.spyOn(window, 'scrollTo').mockImplementation(() => {})

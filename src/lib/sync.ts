@@ -296,3 +296,26 @@ export function describeState(state: AppState): string {
   const days = Object.keys(state.hist).length
   return `學過 ${learned} 個字、手寫練過 ${written} 個、練習紀錄 ${days} 天`
 }
+
+/**
+ * 使用者選了「先不同步，只存在這台」。記住這個選擇，不然每次開 App 都跳登入頁。
+ * 跟同步設定分開存：它不是同步設定，而是「不要同步」。
+ */
+const LOCAL_ONLY_KEY = 'jp-renshuu.local-only'
+
+export function loadLocalOnly(): boolean {
+  try {
+    return localStorage.getItem(LOCAL_ONLY_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+export function saveLocalOnly(value: boolean): void {
+  try {
+    if (value) localStorage.setItem(LOCAL_ONLY_KEY, '1')
+    else localStorage.removeItem(LOCAL_ONLY_KEY)
+  } catch {
+    // 存不了就每次問一次，不會壞掉
+  }
+}

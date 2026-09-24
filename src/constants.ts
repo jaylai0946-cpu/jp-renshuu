@@ -22,3 +22,11 @@ export const DEFAULT_SETTINGS = {
 export const NEW_PER_DAY_CHOICES = [5, 10, 15, 20]
 export const WRITE_PER_DAY_CHOICES = [0, 3, 5, 10]
 export const BATCH_SIZE_CHOICES = [3, 5, 8, 10]
+
+/**
+ * 內建的同步伺服器網址。填了之後登入頁就不用再問一次。
+ *
+ * 這不是機密——機密是密鑰。可以直接寫死在這裡 commit 進 repo，
+ * 或在建置時用 VITE_SYNC_ENDPOINT 蓋掉。留空的話登入頁會多一個欄位讓人自己填。
+ */
+export const DEFAULT_SYNC_ENDPOINT: string = (import.meta.env.VITE_SYNC_ENDPOINT ?? '').trim()

@@ -16,10 +16,11 @@ interface Props {
   sync: ReturnType<typeof useSync>
   onSetting: <K extends keyof AppState['settings']>(k: K, v: AppState['settings'][K]) => void
   onReplaceState: (next: AppState) => void
+  onLogout: () => void
   onAbout: () => void
 }
 
-export function Stats({ state, today, sync, onSetting, onReplaceState, onAbout }: Props) {
+export function Stats({ state, today, sync, onSetting, onReplaceState, onLogout, onAbout }: Props) {
   const [paste, setPaste] = useState('')
   const [message, setMessage] = useState<{ tone: 'ok' | 'bad'; text: string } | null>(null)
 
@@ -240,9 +241,14 @@ export function Stats({ state, today, sync, onSetting, onReplaceState, onAbout }
       </div>
 
       <div className="sec">
-        <button type="button" className="ghost" onClick={onAbout} style={{ width: '100%' }}>
-          關於這個 App
-        </button>
+        <div className="row">
+          <button type="button" className="ghost" onClick={onAbout}>
+            關於這個 App
+          </button>
+          <button type="button" className="ghost" onClick={onLogout}>
+            登出
+          </button>
+        </div>
       </div>
     </>
   )

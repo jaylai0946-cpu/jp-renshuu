@@ -832,3 +832,31 @@ select {
 .pad + .pad {
   border-left: 0;
 }
+
+/* ---- 登入頁 ---- */
+.login {
+  max-width: 400px;
+  margin: 0 auto;
+  padding-top: 20px;
+}
+.login .title {
+  font-size: 1.5rem;
+}
+.login form label {
+  display: block;
+  margin-bottom: 4px;
+}
+.login form input {
+  margin-bottom: 14px;
+}
+.login input[type='password'],
+.login input[type='url'] {
+  width: 100%;
+  border: 2px solid var(--line);
+  background: var(--card);
+  color: var(--ink);
+  border-radius: 12px;
+  padding: 12px;
+  font-family: var(--ui);
+  font-size: 1rem;
+}

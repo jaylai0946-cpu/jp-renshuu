@@ -3,6 +3,7 @@ import { About } from './components/About'
 import { Compose } from './components/Compose'
 import { Handwriting } from './components/Handwriting'
 import { Home } from './components/Home'
+import { Login } from './components/Login'
 import { Nav, type TabId } from './components/Nav'
 import { Round } from './components/Round'
 import { Stats } from './components/Stats'
@@ -13,9 +14,9 @@ import { UNIT_BY_ID } from './data/units'
 import { answerWriting, applyProgressPatch, recordGrade, setSetting } from './lib/actions'
 import { ymd } from './lib/dates'
 import { markKnownPatch } from './lib/srs'
-import { generateKey, parseSetupLink } from './lib/sync'
+import { generateKey, loadLocalOnly, parseSetupLink, saveLocalOnly } from './lib/sync'
 import { syncStatusText } from './lib/syncStatus'
-import { loadState, saveState } from './lib/storage'
+import { emptyState, loadState, saveState } from './lib/storage'
 import { warmUpSpeech } from './lib/speech'
 import type { AppState } from './types'
 import { useRound } from './useRound'
@@ -27,6 +28,9 @@ export default function App() {
   const [state, setState] = useState<AppState>(loadState)
   const [view, setView] = useState<View>('home')
   const [today, setToday] = useState(ymd)
+  const [localOnly, setLocalOnly] = useState(loadLocalOnly)
+  // 從連結進來的人不該先看到登入頁閃一下。effect 跑之前就先判斷好
+  const [fromLink] = useState(() => parseSetupLink(window.location.hash) !== null)
 
   useEffect(() => saveState(state), [state])
 
@@ -89,6 +93,27 @@ export default function App() {
 
   const round = useRound(state, setState)
 
+  /**
+   * 登出：同步設定和本機進度一起清掉。
+   *
+   * 只清設定不清進度的話，下一個人在同一台裝置登入會先看到上一個人的資料，
+   * 而且那份資料會被當成「本機改動」推到他的帳號去。
+   */
+  const logout = useCallback(() => {
+    if (
+      !window.confirm(
+        '登出會把這台裝置上的進度清掉（雲端那份留著，下次登入會拉回來）。\n\n確定要登出嗎？',
+      )
+    ) {
+      return
+    }
+    void sync.disable(false)
+    saveLocalOnly(false)
+    setLocalOnly(false)
+    setState(emptyState())
+    setView('home')
+  }, [sync])
+
   const go = useCallback(
     (tab: View) => {
       warmUpSpeech()
@@ -109,6 +134,21 @@ export default function App() {
     if (!unit) return
     if (!window.confirm(`把「${unit.name}」還沒學的都標成已會？之後會以複習題出現。`)) return
     setState((s) => applyProgressPatch(s, markKnownPatch(s, unitId, ymd())))
+  }
+
+  // ---- 還沒登入也還沒選「只存這台」：先出登入頁 ----
+  if (!sync.config && !localOnly && !fromLink) {
+    return (
+      <div className="wrap">
+        <Login
+          onLogin={(endpoint, key) => sync.enable(endpoint, key)}
+          onSkip={() => {
+            saveLocalOnly(true)
+            setLocalOnly(true)
+          }}
+        />
+      </div>
+    )
   }
 
   // ---- 練習回合是全螢幕，沒有底部導覽 ----
@@ -202,6 +242,7 @@ export default function App() {
           sync={sync}
           onSetting={(k, v) => setState((s) => setSetting(s, k, v))}
           onReplaceState={(next) => setState(next)}
+          onLogout={logout}
           onAbout={() => go('about')}
         />
       ) : null}
