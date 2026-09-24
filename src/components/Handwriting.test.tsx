@@ -69,6 +69,29 @@ describe('手寫分頁', () => {
     expect(screen.getByText('a')).toBeInTheDocument()
   })
 
+  it('底部是上一個／下一個一對，發音移到字的旁邊', () => {
+    openWriting()
+    fireEvent.click(screen.getByRole('button', { name: '描寫' }))
+
+    expect(screen.getByRole('button', { name: '上一個' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '寫好了，下一個' })).toBeInTheDocument()
+
+    // 發音在字頭那一區，不在底部那一排
+    const speak = screen.getByRole('button', { name: /唸一次/ })
+    expect(speak.closest('.rtop')).not.toBeNull()
+  })
+
+  it('「上一個」會倒回去，第一個字會繞到最後一個', () => {
+    openWriting()
+    expect(screen.getByText(/第 1 \/ 46 個/)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '上一個' }))
+    expect(screen.getByText(/第 46 \/ 46 個/)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '寫好了，下一個' }))
+    expect(screen.getByText(/第 1 \/ 46 個/)).toBeInTheDocument()
+  })
+
   it('換字換單元都動得了，筆畫數跟著變', () => {
     openWriting()
     expect(screen.getByText(/第 1 \/ 46 個\s+這個字 3 筆/)).toBeInTheDocument()
@@ -94,6 +117,24 @@ describe('手寫分頁', () => {
     openWriting()
     fireEvent.click(screen.getByRole('button', { name: '片假名 清音' }))
     expect(screen.getByRole('img', { name: /ア 的筆順/ })).toBeInTheDocument()
+  })
+
+  it('提示不佔版面高度，不會把下面的按鈕推走', () => {
+    openWriting()
+    fireEvent.click(screen.getByRole('button', { name: '描寫' }))
+
+    // 提示是蓋在畫布上的 overlay，不是流程裡的區塊——放在流程裡會把
+    // 「寫好了，下一個」往下推，iPad 橫向就被推到底部導覽底下
+    fireEvent.pointerDown(screen.getByLabelText('手寫區'), {
+      pointerId: 1,
+      pointerType: 'touch',
+      clientX: 10,
+      clientY: 10,
+    })
+
+    const hint = screen.getByRole('alert')
+    expect(hint).toHaveClass('padhint')
+    expect(hint.closest('.padstack')).not.toBeNull()
   })
 
   it('penOnly 開著時手指碰畫布會提示，可以一鍵關掉', () => {

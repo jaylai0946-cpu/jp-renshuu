@@ -860,3 +860,41 @@ select {
   font-family: var(--ui);
   font-size: 1rem;
 }
+
+/* 手寫提示蓋在畫布上，不佔版面高度——佔高度的話會把下面的按鈕
+   推到底部導覽底下（iPad 橫向只有 834 高） */
+.padstack {
+  position: relative;
+}
+.padhint {
+  position: absolute;
+  z-index: 2;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(360px, calc(100% - 24px));
+  background: var(--card);
+  border: 2px solid var(--stamp);
+  border-radius: 14px;
+  padding: 14px 16px;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.18);
+}
+.padhint p {
+  margin: 0 0 10px;
+}
+
+/* 橫拿時畫面矮，把垂直的間距收緊，整頁才塞得下 */
+@media (orientation: landscape) and (max-height: 900px) {
+  .wrap {
+    padding-top: calc(8px + env(safe-area-inset-top, 0px));
+  }
+  .chips {
+    margin-bottom: 8px;
+  }
+  .sec {
+    margin-top: 14px;
+  }
+  .rtop {
+    margin-bottom: 8px;
+  }
+}
