@@ -211,6 +211,37 @@ describe('登出', () => {
     expect(localStorage.getItem(SYNC_KEY)).toBeNull()
   })
 
+  it('推送還在飛的時候登出，同步設定不會被寫回來', async () => {
+    // 推送卡住，登出之後才失敗回來——CI 上就是這個時序把設定復活的
+    let failPush: (() => void) | null = null
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        if (init?.method === 'PUT') {
+          await new Promise<void>((resolve) => {
+            failPush = resolve
+          })
+          return new Response('{}', { status: 500 })
+        }
+        return new Response('{}', { status: 404 })
+      }),
+    )
+
+    render(<App />)
+    await login('jay', 'hunter2hunter2')
+    await waitFor(() => expect(storedKey()).not.toBeNull())
+
+    fireEvent.click(screen.getByRole('button', { name: /紀錄/ }))
+    fireEvent.click(screen.getByRole('button', { name: '登出' }))
+    await waitFor(() => expect(localStorage.getItem(SYNC_KEY)).toBeNull())
+
+    // 現在才讓那個推送失敗回來
+    failPush?.()
+    await new Promise((r) => setTimeout(r, 50))
+
+    expect(localStorage.getItem(SYNC_KEY)).toBeNull()
+  })
+
   it('登出後「只存這台」的選擇也清掉，不然會跳過登入頁', () => {
     render(<App />)
     fireEvent.click(screen.getByRole('button', { name: '先不同步，只存在這台裝置' }))

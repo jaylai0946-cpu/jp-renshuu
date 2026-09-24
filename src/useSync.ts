@@ -44,12 +44,23 @@ export function useSync(state: AppState, applyRemote: (next: AppState) => void) 
     configRef.current = next
   }, [])
 
+  /**
+   * 網路來回期間使用者可能登出、或換了另一組設定。回來之後要確認手上這份
+   * 還是當下那一份，不然會把已經清掉的設定寫回去——登出之後同步設定復活，
+   * 下一個人在這台裝置就會被接到上一個人的帳號。
+   */
+  function stillCurrent(config: SyncConfig): boolean {
+    return configRef.current === config
+  }
+
   const doPush = useCallback(async () => {
     const current = configRef.current
     if (!current) return
     setStatus({ kind: 'busy' })
 
     const result = await push(current, stateRef.current)
+    if (!stillCurrent(current)) return
+
     if (result.status === 'ok') {
       commitConfig({ ...current, lastSeen: result.updatedAt, dirty: false })
       setStatus({ kind: 'idle', at: result.updatedAt })
@@ -69,6 +80,7 @@ export function useSync(state: AppState, applyRemote: (next: AppState) => void) 
     setStatus({ kind: 'busy' })
 
     const result = await pull(current)
+    if (!stillCurrent(current)) return
 
     if (result.status === 'error') {
       setStatus({ kind: 'error', message: result.message })
@@ -162,6 +174,8 @@ export function useSync(state: AppState, applyRemote: (next: AppState) => void) 
     if (!current) return
     setStatus({ kind: 'busy' })
     const result = await forcePush(current, stateRef.current)
+    if (!stillCurrent(current)) return
+
     if (result.status === 'ok') {
       commitConfig({ ...current, lastSeen: result.updatedAt, dirty: false })
       setStatus({ kind: 'idle', at: result.updatedAt })
