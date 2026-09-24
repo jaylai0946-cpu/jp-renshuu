@@ -47,7 +47,17 @@ export function useSync(state: AppState, applyRemote: (next: AppState) => void) 
   const appliedRef = useRef<AppState | null>(null)
   const timerRef = useRef<number | undefined>(undefined)
 
+  /** 元件已經卸載就不要再寫。非同步的同步鏈可能在卸載之後才回來 */
+  const mountedRef = useRef(true)
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
+
   const commitConfig = useCallback((next: SyncConfig | null) => {
+    if (!mountedRef.current) return
     saveSyncConfig(next)
     setConfigState(next)
     configRef.current = next

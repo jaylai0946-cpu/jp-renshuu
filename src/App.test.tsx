@@ -18,6 +18,9 @@ describe('App', () => {
     localStorage.clear()
     // 跳過登入頁：這些測試測的是登入之後的行為，登入本身在 Login.test.tsx
     localStorage.setItem('jp-renshuu.local-only', '1')
+    // 預設把網路關掉。沒擋的話 #sync= 那幾個測試會真的打到 workers.dev，
+    // 回應時間不可預測，非同步鏈會在下一個測試清掉 localStorage 之後才寫回去
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 404 })))
     window.location.hash = ''
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     vi.spyOn(window, 'scrollTo').mockImplementation(() => {})

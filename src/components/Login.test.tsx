@@ -42,6 +42,8 @@ describe('登入頁', () => {
   beforeEach(() => {
     localStorage.clear()
     window.location.hash = ''
+    // 預設把網路關掉，測試不該真的打到 workers.dev
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 404 })))
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
   })
@@ -173,6 +175,38 @@ describe('登入頁', () => {
     expect(screen.queryByRole('button', { name: '登入 / 建立' })).not.toBeInTheDocument()
   })
 
+  it('慢的同步請求在元件卸載之後回來，不會寫髒 localStorage', async () => {
+    // CI 上測試會真的打到 workers.dev，回應慢到下一個測試都開始了。
+    // 這裡模擬那個時序：請求卡住 -> 元件卸載 -> 清掉 localStorage -> 請求才回來
+    // 只卡住 PUT：GET 要先回 404（雲端是空的）才會走到推送，
+    // 而推送失敗才是會寫 localStorage 的那條路
+    const gate: { release: (() => void) | null } = { release: null }
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        if (init?.method !== 'PUT') return new Response('{}', { status: 404 })
+        await new Promise<void>((resolve) => {
+          gate.release = resolve
+        })
+        return new Response('{}', { status: 500 })
+      }),
+    )
+
+    window.location.hash = `#sync=${encodeURIComponent(ENDPOINT)}|${'a'.repeat(32)}`
+    const { unmount } = render(<App />)
+    await waitFor(() => expect(localStorage.getItem(SYNC_KEY)).not.toBeNull())
+    // 等推送真的送出去才卸載
+    await waitFor(() => expect(gate.release).not.toBeNull())
+
+    unmount()
+    localStorage.clear()
+
+    gate.release?.()
+    await new Promise((r) => setTimeout(r, 50))
+
+    expect(localStorage.getItem(SYNC_KEY)).toBeNull()
+  })
+
   it('邀請連結進來的人也不用再登入一次', () => {
     window.location.hash = `#invite=${encodeURIComponent(ENDPOINT)}`
     render(<App />)
@@ -184,6 +218,8 @@ describe('登出', () => {
   beforeEach(() => {
     localStorage.clear()
     window.location.hash = ''
+    // 預設把網路關掉，測試不該真的打到 workers.dev
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 404 })))
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
   })
