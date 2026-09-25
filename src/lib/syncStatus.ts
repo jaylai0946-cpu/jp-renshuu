@@ -8,9 +8,9 @@ export function syncStatusText(status: ReturnType<typeof useSync>['status']): st
       return '同步中…'
     case 'idle':
       return status.at ? '已同步' : '已啟用'
+    case 'merged':
+      return '已合併兩台的進度'
     case 'error':
       return `同步失敗：${status.message}`
-    case 'conflict':
-      return '兩邊都有改動'
   }
 }

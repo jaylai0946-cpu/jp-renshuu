@@ -203,7 +203,7 @@ export function Stats({ state, today, sync, onSetting, onReplaceState, onLogout,
 
       <div className="sec">
         <h3>手機與電腦同步</h3>
-        <SyncPanel sync={sync} state={state} />
+        <SyncPanel sync={sync} />
       </div>
 
       <div className="sec">

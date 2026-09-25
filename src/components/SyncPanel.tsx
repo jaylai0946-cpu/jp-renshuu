@@ -2,21 +2,18 @@ import { useState } from 'react'
 import {
   buildInviteLink,
   buildSetupLink,
-  describeState,
   generateKey,
   validateEndpoint,
   validateKey,
 } from '../lib/sync'
 import { syncStatusText } from '../lib/syncStatus'
-import type { AppState } from '../types'
 import type { useSync } from '../useSync'
 
 interface Props {
   sync: ReturnType<typeof useSync>
-  state: AppState
 }
 
-export function SyncPanel({ sync, state }: Props) {
+export function SyncPanel({ sync }: Props) {
   const { config, status } = sync
   const [endpoint, setEndpoint] = useState('')
   const [key, setKey] = useState('')
@@ -42,36 +39,6 @@ export function SyncPanel({ sync, state }: Props) {
     if (keyError) return setError(keyError)
     setError(null)
     sync.enable(endpoint.trim().replace(/\/+$/, ''), key.trim())
-  }
-
-  if (status.kind === 'conflict') {
-    return (
-      <div className="panel">
-        <b>兩邊都有改動</b>
-        <p className="muted small">
-          這台和雲端在上次同步之後都練過，要留哪一份？留下來的會蓋掉另一份。
-        </p>
-        <p className="small">
-          <b>這台：</b>
-          {describeState(state)}
-          <br />
-          <b>雲端：</b>
-          {describeState(status.remote.state)}
-        </p>
-        <div className="row">
-          <button type="button" className="ghost" onClick={() => void sync.resolveWithLocal()}>
-            用這台的
-          </button>
-          <button
-            type="button"
-            className="ghost"
-            onClick={() => sync.resolveWithRemote(status.remote)}
-          >
-            用雲端的
-          </button>
-        </div>
-      </div>
-    )
   }
 
   if (!config) {

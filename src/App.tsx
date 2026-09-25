@@ -9,7 +9,6 @@ import { Round } from './components/Round'
 import { Stats } from './components/Stats'
 import { Summary } from './components/Summary'
 import { Units } from './components/Units'
-import { SyncPanel } from './components/SyncPanel'
 import { UNIT_BY_ID } from './data/units'
 import { answerWriting, applyProgressPatch, recordGrade, setSetting } from './lib/actions'
 import { ymd } from './lib/dates'
@@ -187,12 +186,6 @@ export default function App() {
         <h1 className="title">日文練習本</h1>
         <span className="sync">{syncStatusText(sync.status)}</span>
       </div>
-
-      {sync.status.kind === 'conflict' ? (
-        <div className="sec">
-          <SyncPanel sync={sync} state={state} />
-        </div>
-      ) : null}
 
       {view === 'home' ? (
         <Home

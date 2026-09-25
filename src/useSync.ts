@@ -1,14 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  forcePush,
   loadSyncConfig,
   pull,
   push,
   remove,
   saveSyncConfig,
-  type RemoteRecord,
   type SyncConfig,
 } from './lib/sync'
+import { mergeStates } from './lib/merge'
 import { isPristine } from './lib/storage'
 import type { AppState } from './types'
 
@@ -17,7 +16,8 @@ export type SyncStatus =
   | { kind: 'idle'; at: string | null }
   | { kind: 'busy' }
   | { kind: 'error'; message: string }
-  | { kind: 'conflict'; remote: RemoteRecord }
+  /** 剛把兩台的進度合起來 */
+  | { kind: 'merged'; at: string }
 
 /** 改完之後等一下再推，免得每打一個字就打一次伺服器。 */
 const PUSH_DEBOUNCE_MS = 1500
@@ -84,13 +84,28 @@ export function useSync(state: AppState, applyRemote: (next: AppState) => void) 
       commitConfig({ ...current, lastSeen: result.updatedAt, dirty: false })
       setStatus({ kind: 'idle', at: result.updatedAt })
     } else if (result.status === 'conflict') {
-      setStatus({ kind: 'conflict', remote: result.remote })
+      // 推的途中另一台先推上去了。合併之後再推一次，一樣不叫人二選一
+      const merged = mergeStates(stateRef.current, result.remote.state)
+      appliedRef.current = merged
+      applyRemote(merged)
+
+      const retry = await push({ ...current, lastSeen: result.remote.updatedAt }, merged)
+      if (!stillCurrent(current)) return
+
+      if (retry.status === 'ok') {
+        commitConfig({ ...current, lastSeen: retry.updatedAt, dirty: false })
+        setStatus({ kind: 'merged', at: retry.updatedAt })
+      } else {
+        // 只重試一次。再撞就把合併結果留在本機，下次開 App 對一次就好
+        commitConfig({ ...current, dirty: true })
+        setStatus({ kind: 'idle', at: null })
+      }
     } else {
       // 推不上去就把 dirty 留著，下次有機會再推，不要假裝成功
       commitConfig({ ...current, dirty: true })
       setStatus({ kind: 'error', message: result.message })
     }
-  }, [commitConfig])
+  }, [applyRemote, commitConfig])
 
   /** 從雲端拉一次。本機有未推送的改動時不會直接覆蓋。 */
   const syncNow = useCallback(async () => {
@@ -115,8 +130,33 @@ export function useSync(state: AppState, applyRemote: (next: AppState) => void) 
     const remote = result.record
 
     if (current.dirty && remote.updatedAt !== current.lastSeen) {
-      // 兩邊都改過，交給使用者決定，不要自己選
-      setStatus({ kind: 'conflict', remote })
+      /*
+       * 兩邊都練過。合併，不要叫人二選一。
+       *
+       * 間隔複習的進度本來就合得起來：同一個字取學得比較前面的那邊。
+       * 逼人「留這台還是留雲端」等於逼人丟掉一半的練習，而且 iPad 和
+       * iPhone 交替用的話幾乎每次切換都會撞到。
+       */
+      const merged = mergeStates(stateRef.current, remote.state)
+      appliedRef.current = merged
+      applyRemote(merged)
+      settledRef.current = true
+
+      // lastSeen 用剛拉到的那個版本，推上去才不會又被判成衝突
+      const result = await push({ ...current, lastSeen: remote.updatedAt }, merged)
+      if (!stillCurrent(current)) return
+
+      if (result.status === 'ok') {
+        commitConfig({ ...current, lastSeen: result.updatedAt, dirty: false })
+        setStatus({ kind: 'merged', at: result.updatedAt })
+      } else if (result.status === 'conflict') {
+        // 合併期間又被另一台改了。合併的結果先留在本機，下次再對一次
+        commitConfig({ ...current, dirty: true })
+        setStatus({ kind: 'idle', at: null })
+      } else {
+        commitConfig({ ...current, dirty: true })
+        setStatus({ kind: 'error', message: result.message })
+      }
       return
     }
 
@@ -145,7 +185,6 @@ export function useSync(state: AppState, applyRemote: (next: AppState) => void) 
   useEffect(() => {
     const current = configRef.current
     if (!current || !settledRef.current) return
-    if (status.kind === 'conflict') return
     if (appliedRef.current === state) {
       appliedRef.current = null
       return
@@ -188,36 +227,5 @@ export function useSync(state: AppState, applyRemote: (next: AppState) => void) 
     [commitConfig],
   )
 
-  const resolveWithLocal = useCallback(async () => {
-    const current = configRef.current
-    if (!current) return
-    setStatus({ kind: 'busy' })
-    const result = await forcePush(current, stateRef.current)
-    if (!stillCurrent(current)) return
-
-    if (result.status === 'ok') {
-      commitConfig({ ...current, lastSeen: result.updatedAt, dirty: false })
-      setStatus({ kind: 'idle', at: result.updatedAt })
-    } else {
-      setStatus({
-        kind: 'error',
-        message: result.status === 'error' ? result.message : '又被改掉了，再試一次',
-      })
-    }
-  }, [commitConfig])
-
-  const resolveWithRemote = useCallback(
-    (remote: RemoteRecord) => {
-      const current = configRef.current
-      if (!current) return
-      appliedRef.current = remote.state
-      applyRemote(remote.state)
-      commitConfig({ ...current, lastSeen: remote.updatedAt, dirty: false })
-      setStatus({ kind: 'idle', at: remote.updatedAt })
-      settledRef.current = true
-    },
-    [applyRemote, commitConfig],
-  )
-
-  return { config, status, enable, disable, syncNow, resolveWithLocal, resolveWithRemote }
+  return { config, status, enable, disable, syncNow }
 }

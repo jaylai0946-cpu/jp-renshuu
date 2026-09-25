@@ -289,14 +289,6 @@ export async function remove(config: SyncConfig): Promise<void> {
   }
 }
 
-/** 給衝突畫面用的摘要，讓使用者知道兩邊差在哪。 */
-export function describeState(state: AppState): string {
-  const learned = Object.keys(state.items).length
-  const written = Object.keys(state.write).length
-  const days = Object.keys(state.hist).length
-  return `學過 ${learned} 個字、手寫練過 ${written} 個、練習紀錄 ${days} 天`
-}
-
 /**
  * 使用者選了「先不同步，只存在這台」。記住這個選擇，不然每次開 App 都跳登入頁。
  * 跟同步設定分開存：它不是同步設定，而是「不要同步」。
