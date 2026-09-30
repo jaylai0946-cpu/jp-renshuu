@@ -11,6 +11,8 @@ interface Props {
   pauseMs?: number
   /** 標出筆順編號和起筆點 */
   showNumbers?: boolean
+  /** 每次變動就從頭再播一次。拗音兩格共用一顆「再看一次」，所以由上層控制 */
+  replay?: number
 }
 
 /**
@@ -28,6 +30,7 @@ export function StrokeOrderView({
   strokeMs = 650,
   pauseMs = 220,
   showNumbers = true,
+  replay = 0,
 }: Props) {
   const paths = pathsFor(ch)
 
@@ -48,9 +51,9 @@ export function StrokeOrderView({
 
   // 換字就從頭播。用 render 期調整而不是 effect——effect 會多跑一次 render，
   // 中間那一幀會閃到上一個字的動畫進度
-  const [prevCh, setPrevCh] = useState(ch)
-  if (ch !== prevCh) {
-    setPrevCh(ch)
+  const [prev, setPrev] = useState({ ch, replay })
+  if (ch !== prev.ch || replay !== prev.replay) {
+    setPrev({ ch, replay })
     setElapsed(0)
     setPlaying(true)
   }
@@ -73,7 +76,7 @@ export function StrokeOrderView({
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
-  }, [ch, playing, paths.length, total, strokeMs])
+  }, [ch, replay, playing, paths.length, total, strokeMs])
 
   /** 第 i 筆現在畫到幾成 */
   function progress(i: number): number {
@@ -89,7 +92,7 @@ export function StrokeOrderView({
   }
 
   return (
-    <div className="center">
+    <div>
       <svg
         width={size}
         height={size}
@@ -99,9 +102,16 @@ export function StrokeOrderView({
         aria-label={`${ch} 的筆順，共 ${paths.length} 筆`}
       >
         {/* 田字格 */}
-        <g stroke="var(--grid)" strokeWidth="0.7">
+        <g stroke="var(--grid)" strokeWidth="0.7" strokeDasharray="3 2.5">
           <line x1="0" y1={KANJIVG_SIZE / 2} x2={KANJIVG_SIZE} y2={KANJIVG_SIZE / 2} />
           <line x1={KANJIVG_SIZE / 2} y1="0" x2={KANJIVG_SIZE / 2} y2={KANJIVG_SIZE} />
+        </g>
+
+        {/* 整個字的淡底，還沒畫到的筆也看得到位置 */}
+        <g stroke="var(--ghost)" strokeWidth="5" fill="none" strokeLinecap="round" strokeLinejoin="round">
+          {paths.map((d, i) => (
+            <path key={i} d={d} />
+          ))}
         </g>
 
         {paths.map((d, i) => {
@@ -112,7 +122,7 @@ export function StrokeOrderView({
               key={i}
               d={d}
               fill="none"
-              stroke={p >= 1 ? 'var(--ink)' : 'var(--stamp)'}
+              stroke={p >= 1 ? 'var(--text)' : 'var(--coral)'}
               strokeWidth="5"
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -127,20 +137,22 @@ export function StrokeOrderView({
           ? meta.map((m, i) => {
               const shown = progress(i) > 0
               return (
-                <g key={i} opacity={shown ? 1 : 0.25}>
+                <g key={i} opacity={shown ? 1 : 0.35}>
                   <circle
                     cx={m.start.x}
                     cy={m.start.y}
-                    r={i === current && playing ? 4 : 2.6}
-                    fill="var(--stamp)"
+                    r={i === current && playing ? 6.5 : 5.5}
+                    fill="var(--coral)"
+                    stroke="var(--edge)"
+                    strokeWidth="0.9"
                   />
                   <text
                     x={m.start.x}
-                    y={m.start.y - 5.5}
-                    fontSize="8"
+                    y={m.start.y + 2.4}
+                    fontSize="7"
                     textAnchor="middle"
-                    fill="var(--stamp)"
-                    fontWeight="600"
+                    fill="#fff"
+                    fontWeight="700"
                   >
                     {i + 1}
                   </text>
@@ -149,22 +161,6 @@ export function StrokeOrderView({
             })
           : null}
       </svg>
-
-      <p className="muted small" style={{ margin: '8px 0 0' }}>
-        共 {paths.length} 筆{playing ? `　第 ${current + 1} 筆` : ''}
-      </p>
-      <p style={{ margin: '10px 0 0' }}>
-        <button
-          type="button"
-          className="speak"
-          onClick={() => {
-            setElapsed(0)
-            setPlaying(true)
-          }}
-        >
-          ▶︎ 再看一次
-        </button>
-      </p>
     </div>
   )
 }

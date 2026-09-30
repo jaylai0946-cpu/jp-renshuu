@@ -54,6 +54,9 @@ export interface DayHist {
   h: number
 }
 
+/** 外觀。auto 跟著系統的深色模式 */
+export type Theme = 'auto' | 'light' | 'dark'
+
 export interface Settings {
   newPerDay: number
   romaji: boolean
@@ -66,6 +69,7 @@ export interface Settings {
   batchSize: number
   /** 答對時小震一下。iPad 沒有馬達，開了也不會震 */
   haptics: boolean
+  theme: Theme
 }
 
 export interface AppState {

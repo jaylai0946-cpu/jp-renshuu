@@ -30,7 +30,7 @@ const GHOST_ALPHA = 0.22
 
 const COLOR: Record<Verdict | 'ink', string> = {
   ok: '--ok',
-  shape: '--stamp',
+  shape: '--amber',
   bad: '--bad',
   ink: '--ink',
 }
@@ -91,7 +91,8 @@ export function Brush({
     // 田字格的十字輔助線。外框由 CSS 的 border 負責
     ctx.save()
     ctx.strokeStyle = cssVar('--grid')
-    ctx.lineWidth = 1
+    ctx.lineWidth = 1.5
+    ctx.setLineDash([6, 5])
     ctx.beginPath()
     ctx.moveTo(0, size / 2)
     ctx.lineTo(size, size / 2)

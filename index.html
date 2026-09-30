@@ -8,13 +8,29 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="日文" />
-    <meta name="theme-color" content="#EEF3EF" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#111827" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#FFF7EA" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#1E1A29" media="(prefers-color-scheme: dark)" />
     <title>日文練習本</title>
+    <!--
+      第一次繪製前就套用手動選的外觀，不然選了深色的人每次打開都會先閃一下白。
+      邏輯和 src/lib/theme.ts 一樣，只是這裡等不到 React 載入
+    -->
+    <script>
+      try {
+        var t = JSON.parse(localStorage.getItem('jp-renshuu') || '{}').settings.theme
+        if (t === 'light' || t === 'dark') {
+          document.documentElement.dataset.theme = t
+          var c = t === 'dark' ? '#1E1A29' : '#FFF7EA'
+          document.querySelectorAll('meta[name="theme-color"]').forEach(function (m) {
+            m.content = c
+          })
+        }
+      } catch (e) {}
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Klee+One:wght@400;600&family=Noto+Sans+TC:wght@400;500;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Noto+Sans+TC:wght@400;500;700;900&family=Zen+Maru+Gothic:wght@500;700;900&display=swap"
       rel="stylesheet"
     />
   </head>

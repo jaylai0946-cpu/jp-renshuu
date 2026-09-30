@@ -18,7 +18,14 @@ export const DEFAULT_SETTINGS = {
    */
   batchSize: 5,
   haptics: true,
+  theme: 'auto',
 } as const
+
+export const THEME_CHOICES = [
+  { id: 'auto', label: '自動' },
+  { id: 'light', label: '淺色' },
+  { id: 'dark', label: '深色' },
+] as const
 
 export const NEW_PER_DAY_CHOICES = [5, 10, 15, 20]
 export const WRITE_PER_DAY_CHOICES = [0, 3, 5, 10]

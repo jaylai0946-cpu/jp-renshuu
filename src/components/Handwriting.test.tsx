@@ -13,7 +13,7 @@ function stubCanvas() {
   const ctx = {
     setTransform: vi.fn(), clearRect: vi.fn(), beginPath: vi.fn(), moveTo: vi.fn(),
     lineTo: vi.fn(), stroke: vi.fn(), arc: vi.fn(), fill: vi.fn(), save: vi.fn(),
-    restore: vi.fn(), lineCap: '', lineJoin: '', strokeStyle: '', fillStyle: '',
+    restore: vi.fn(), setLineDash: vi.fn(), lineCap: '', lineJoin: '', strokeStyle: '', fillStyle: '',
     lineWidth: 0, globalAlpha: 1,
   }
   HTMLCanvasElement.prototype.getContext = vi.fn(() => ctx) as never
@@ -69,16 +69,17 @@ describe('手寫分頁', () => {
     expect(screen.getByText('a')).toBeInTheDocument()
   })
 
-  it('底部是上一個／下一個一對，發音移到字的旁邊', () => {
+  it('底部是上一個／下一個一對，發音在書寫卡的工具列', () => {
     openWriting()
     fireEvent.click(screen.getByRole('button', { name: '描寫' }))
 
     expect(screen.getByRole('button', { name: '上一個' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '寫好了，下一個' })).toBeInTheDocument()
 
-    // 發音在字頭那一區，不在底部那一排
+    // 發音在書寫卡的工具列，不在底部那一排
     const speak = screen.getByRole('button', { name: /唸一次/ })
-    expect(speak.closest('.rtop')).not.toBeNull()
+    expect(speak.closest('.wcard')).not.toBeNull()
+    expect(speak.closest('.wnav')).toBeNull()
   })
 
   it('「上一個」會倒回去，第一個字會繞到最後一個', () => {
@@ -94,11 +95,11 @@ describe('手寫分頁', () => {
 
   it('換字換單元都動得了，筆畫數跟著變', () => {
     openWriting()
-    expect(screen.getByText(/第 1 \/ 46 個\s+這個字 3 筆/)).toBeInTheDocument()
+    expect(screen.getByText(/第 1 \/ 46 個・共 3 筆/)).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: '下一個字' }))
     // い 是 2 筆
-    expect(screen.getByText(/第 2 \/ 46 個\s+這個字 2 筆/)).toBeInTheDocument()
+    expect(screen.getByText(/第 2 \/ 46 個・共 2 筆/)).toBeInTheDocument()
   })
 
   it('拗音一題兩格，小字獨立佔一格', () => {

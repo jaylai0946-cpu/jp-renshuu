@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import type { InkPoint } from '../lib/path'
 import {
   VERDICT_LABEL,
@@ -22,6 +22,8 @@ export interface WritingPadProps {
   /** 每一格都寫滿筆數之後回報總評。同一個 text 只會回報一次 */
   onJudged?: (verdict: Verdict) => void
   onPenOnlyBlocked?: () => void
+  /** 插在工具列裡的額外按鈕（手寫分頁的「唸一次」） */
+  actions?: ReactNode
 }
 
 interface CellState {
@@ -50,6 +52,7 @@ export function WritingPad({
   cellSize = 260,
   onJudged,
   onPenOnlyBlocked,
+  actions,
 }: WritingPadProps) {
   const chars = useMemo(() => [...text], [text])
   const [cells, setCells] = useState<CellState[]>(() => chars.map(emptyCell))
@@ -159,38 +162,37 @@ export function WritingPad({
         ))}
       </div>
 
-      <p className="center muted small">
+      <p className="pad-foot">
         已寫 {written} / {expected} 筆
       </p>
 
       {overall ? (
-        <div className={`panel result ${overall === 'bad' ? 'bad' : overall === 'ok' ? 'good' : ''}`}>
-          <div className="rhead">
-            <div className="hanko">
-              <b>{VERDICT_LABEL[overall].mark}</b>
-            </div>
-            <div>
-              <b>{VERDICT_LABEL[overall].text}</b>
-              {scores.map((s, i) => (
-                <div className="muted small" key={i}>
-                  {chars.length > 1 ? `${chars[i]}：` : ''}
-                  {s.message}
-                </div>
-              ))}
-            </div>
+        <div className={`wresult ${overall === 'bad' ? 'bad' : overall === 'ok' ? 'good' : ''}`}>
+          <span className="mark" aria-hidden="true">
+            {VERDICT_LABEL[overall].mark}
+          </span>
+          <div>
+            <b>{VERDICT_LABEL[overall].text}</b>
+            {scores.map((s, i) => (
+              <div className="small" key={i}>
+                {chars.length > 1 ? `${chars[i]}：` : ''}
+                {s.message}
+              </div>
+            ))}
           </div>
         </div>
       ) : null}
 
-      <div className="row" style={{ marginTop: 12 }}>
-        <button type="button" className="ghost" onClick={undo} disabled={!written}>
+      <div className="tools">
+        <button type="button" className="btn btn-sm" onClick={() => setShowGhost((v) => !v)}>
+          {ghostLabel(mode, showGhost)}
+        </button>
+        {actions}
+        <button type="button" className="btn btn-sm" onClick={undo} disabled={!written}>
           上一筆復原
         </button>
-        <button type="button" className="ghost" onClick={reset} disabled={!written}>
+        <button type="button" className="btn btn-sm" onClick={reset} disabled={!written}>
           清除
-        </button>
-        <button type="button" className="ghost" onClick={() => setShowGhost((v) => !v)}>
-          {ghostLabel(mode, showGhost)}
         </button>
       </div>
     </>

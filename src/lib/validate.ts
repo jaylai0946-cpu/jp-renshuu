@@ -62,6 +62,7 @@ function settings(raw: unknown): Settings {
     writePerDay: int(r.writePerDay, DEFAULT_SETTINGS.writePerDay, 0, 30),
     batchSize: int(r.batchSize, DEFAULT_SETTINGS.batchSize, 1, 20),
     haptics: bool(r.haptics, DEFAULT_SETTINGS.haptics),
+    theme: r.theme === 'light' || r.theme === 'dark' || r.theme === 'auto' ? r.theme : DEFAULT_SETTINGS.theme,
   }
 }
 

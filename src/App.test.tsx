@@ -35,7 +35,7 @@ describe('App', () => {
     expect(screen.getByText('今天有 20 題')).toBeInTheDocument()
     expect(screen.getByText(/先教 10 個新字/)).toBeInTheDocument()
     expect(screen.getByText(/從平假名開始/)).toBeInTheDocument()
-    expect(screen.getByText('平假名・清音')).toBeInTheDocument()
+    expect(screen.getAllByText('平假名・清音').length).toBeGreaterThan(0)
   })
 
   it('一次連續教一批（預設 5 個），教完才開始出題', () => {
@@ -88,7 +88,7 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: '開始今日練習' }))
 
     fireEvent.click(screen.getByRole('button', { name: 'a' }))
-    expect(screen.getByText('答對了')).toBeInTheDocument()
+    expect(screen.getByText('答對了！')).toBeInTheDocument()
 
     const saved: AppState = JSON.parse(localStorage.getItem(STORAGE_KEY)!)
     expect(saved.items['h:あ'].b).toBe(2)
@@ -106,10 +106,10 @@ describe('App', () => {
 
     const wrong = screen
       .getAllByRole('button')
-      .find((b) => b.className.includes('choice') && b.textContent !== 'a')!
+      .find((b) => b.className.includes('choice') && b.textContent!.slice(1) !== 'a')!
     fireEvent.click(wrong)
 
-    expect(screen.getByText('正確答案是：a')).toBeInTheDocument()
+    expect(screen.getByText(/正確答案是 a/)).toBeInTheDocument()
     const saved: AppState = JSON.parse(localStorage.getItem(STORAGE_KEY)!)
     expect(saved.items['h:あ'].b).toBe(1)
   })
@@ -135,7 +135,7 @@ describe('App', () => {
 
       const hits = screen.getAllByTestId('haptic-hit')
       expect(hits).toHaveLength(1)
-      expect(hits[0].parentElement!.textContent).toBe('a')
+      expect(hits[0].parentElement!.querySelector('button')).toHaveAccessibleName('a')
       const sw = document.getElementById(hits[0].getAttribute('for')!) as HTMLInputElement
       expect(sw.type).toBe('checkbox')
       expect(sw.hasAttribute('switch')).toBe(true)
@@ -148,7 +148,7 @@ describe('App', () => {
       const sw = document.querySelector<HTMLInputElement>('.haptic-switch')!
       fireEvent.click(screen.getByTestId('haptic-hit'))
 
-      expect(screen.getByText('答對了')).toBeInTheDocument()
+      expect(screen.getByText('答對了！')).toBeInTheDocument()
       expect(sw.checked).toBe(true)
       expect(buzz).toHaveBeenCalledTimes(1)
       expect(buzz).toHaveBeenCalledWith(12)
@@ -168,10 +168,10 @@ describe('App', () => {
       fireEvent.click(screen.getByRole('button', { name: '開始今日練習' }))
       const wrong = screen
         .getAllByRole('button')
-        .find((b) => b.className.includes('choice') && b.textContent !== 'a')!
+        .find((b) => b.className.includes('choice') && b.textContent!.slice(1) !== 'a')!
       fireEvent.click(wrong)
 
-      expect(screen.getByText('正確答案是：a')).toBeInTheDocument()
+      expect(screen.getByText(/正確答案是 a/)).toBeInTheDocument()
       expect(buzz).not.toHaveBeenCalled()
     })
 
@@ -188,7 +188,7 @@ describe('App', () => {
       expect(screen.queryByTestId('haptic-hit')).not.toBeInTheDocument()
       expect(document.querySelector('.haptic-switch')).toBeNull()
       fireEvent.click(screen.getByRole('button', { name: 'a' }))
-      expect(screen.getByText('答對了')).toBeInTheDocument()
+      expect(screen.getByText('答對了！')).toBeInTheDocument()
       expect(buzz).not.toHaveBeenCalled()
     })
 
@@ -214,9 +214,9 @@ describe('App', () => {
 
     const wrong = screen
       .getAllByRole('button')
-      .find((b) => b.className.includes('choice') && b.textContent !== 'a')!
+      .find((b) => b.className.includes('choice') && b.textContent!.slice(1) !== 'a')!
     fireEvent.click(wrong)
-    fireEvent.click(screen.getByRole('button', { name: '繼續' }))
+    fireEvent.click(screen.getByRole('button', { name: '知道了' }))
 
     // 只有一題，答錯之後補一題，所以還沒結束
     expect(screen.getByText('再一次')).toBeInTheDocument()
@@ -304,6 +304,93 @@ describe('App', () => {
       fireEvent.click(screen.getByRole('button', { name: '跳過這題' }))
       expect(screen.getByText('0 / 0')).toBeInTheDocument()
       expect(localStorage.getItem(STORAGE_KEY)).toBe(before)
+    })
+  })
+
+  describe('外觀設定', () => {
+    afterEach(() => {
+      delete document.documentElement.dataset.theme
+    })
+
+    it('預設自動：不設 data-theme，交給系統', () => {
+      render(<App />)
+      fireEvent.click(screen.getByRole('button', { name: /紀錄/ }))
+      expect(screen.getByRole('button', { name: '自動' })).toHaveAttribute('aria-pressed', 'true')
+      expect(document.documentElement.dataset.theme).toBeUndefined()
+    })
+
+    it('選深色、淺色會設 data-theme，存進設定；切回自動會拿掉', () => {
+      render(<App />)
+      fireEvent.click(screen.getByRole('button', { name: /紀錄/ }))
+
+      fireEvent.click(screen.getByRole('button', { name: '深色' }))
+      expect(document.documentElement.dataset.theme).toBe('dark')
+      expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!).settings.theme).toBe('dark')
+
+      fireEvent.click(screen.getByRole('button', { name: '淺色' }))
+      expect(document.documentElement.dataset.theme).toBe('light')
+
+      fireEvent.click(screen.getByRole('button', { name: '自動' }))
+      expect(document.documentElement.dataset.theme).toBeUndefined()
+      expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!).settings.theme).toBe('auto')
+    })
+
+    it('重新整理後記得選過的外觀', () => {
+      seed((s) => {
+        s.settings.theme = 'dark'
+      })
+      render(<App />)
+      expect(document.documentElement.dataset.theme).toBe('dark')
+    })
+  })
+
+  describe('鍵盤操作', () => {
+    beforeEach(() => {
+      seed((s) => {
+        s.settings.newPerDay = 0
+        s.settings.writePerDay = 0
+        s.items['h:あ'] = { b: 3, due: '2020-01-01', seen: 3, wrong: 0 }
+        s.items['h:い'] = { b: 3, due: '2020-01-01', seen: 3, wrong: 0 }
+      })
+    })
+
+    function choiceIndexOf(name: string): number {
+      const buttons = screen.getAllByRole('button').filter((b) => b.className.includes('choice'))
+      return buttons.findIndex((b) => b.textContent!.slice(1) === name)
+    }
+
+    it('數字鍵選答案、Enter 繼續', () => {
+      render(<App />)
+      fireEvent.click(screen.getByRole('button', { name: '開始今日練習' }))
+      const answer = screen.getByTestId('haptic-hit').parentElement!.querySelector('button')!
+      const n = choiceIndexOf(answer.textContent!.slice(1)) + 1
+
+      fireEvent.keyDown(window, { key: String(n) })
+      expect(screen.getByText('答對了！')).toBeInTheDocument()
+
+      fireEvent.keyDown(window, { key: 'Enter' })
+      expect(screen.queryByText('答對了！')).not.toBeInTheDocument()
+    })
+
+    it('S 跳過這題', () => {
+      render(<App />)
+      fireEvent.click(screen.getByRole('button', { name: '開始今日練習' }))
+      const before = localStorage.getItem(STORAGE_KEY)
+      fireEvent.keyDown(window, { key: 's' })
+      fireEvent.keyDown(window, { key: 'S' })
+      expect(screen.getByText('0 / 0')).toBeInTheDocument()
+      expect(localStorage.getItem(STORAGE_KEY)).toBe(before)
+    })
+
+    it('打字的時候不會被當成快捷鍵', () => {
+      render(<App />)
+      fireEvent.click(screen.getByRole('button', { name: '開始今日練習' }))
+      const input = document.createElement('input')
+      document.body.appendChild(input)
+      fireEvent.keyDown(input, { key: '1' })
+      fireEvent.keyDown(input, { key: 's' })
+      expect(screen.getByRole('button', { name: '跳過這題' })).toBeInTheDocument()
+      input.remove()
     })
   })
 

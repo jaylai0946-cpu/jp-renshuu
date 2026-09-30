@@ -8,6 +8,17 @@ import {
 } from '../lib/sync'
 import { syncStatusText } from '../lib/syncStatus'
 import type { useSync } from '../useSync'
+import { SyncDot } from './ui'
+
+/** 網址只露出主機名稱的頭尾，顯示密鑰時才整串秀出來 */
+function maskEndpoint(endpoint: string): string {
+  try {
+    const host = new URL(endpoint).host
+    return host.length > 12 ? `${host.slice(0, 6)}••••${host.slice(-8)}` : '••••'
+  } catch {
+    return '••••'
+  }
+}
 
 interface Props {
   sync: ReturnType<typeof useSync>
@@ -43,15 +54,15 @@ export function SyncPanel({ sync }: Props) {
 
   if (!config) {
     return (
-      <div className="panel">
-        <p className="muted small">
+      <div className="card">
+        <p className="muted">
           要先自己架一台同步伺服器（<code>worker/</code> 裡有現成的 Cloudflare Worker，README 有步驟）。
           兩台裝置填<strong>同一組密鑰</strong>就會互相同步。
         </p>
-        <p className="small" style={{ color: 'var(--bad)' }}>
+        <p className="warn">
           密鑰就是憑證，沒有帳號密碼。拿到密鑰的人就拿得到你的進度，不要貼到公開的地方。
         </p>
-        <label className="small muted" htmlFor="sync-endpoint">
+        <label className="small" htmlFor="sync-endpoint">
           同步伺服器網址
         </label>
         <input
@@ -63,7 +74,7 @@ export function SyncPanel({ sync }: Props) {
           autoComplete="off"
           spellCheck={false}
         />
-        <label className="small muted" htmlFor="sync-key">
+        <label className="small" htmlFor="sync-key">
           密鑰（32 個小寫英數字）
         </label>
         <input
@@ -76,10 +87,10 @@ export function SyncPanel({ sync }: Props) {
           spellCheck={false}
         />
         <div className="row">
-          <button type="button" className="ghost" onClick={enable}>
+          <button type="button" className="btn" onClick={enable}>
             啟用同步
           </button>
-          <button type="button" className="ghost" onClick={() => setKey(generateKey())}>
+          <button type="button" className="btn" onClick={() => setKey(generateKey())}>
             產生新密鑰
           </button>
         </div>
@@ -89,85 +100,81 @@ export function SyncPanel({ sync }: Props) {
   }
 
   return (
-    <div className="panel">
-      <div className="set">
-        <span className="small">狀態</span>
-        <span className="muted small">{syncStatusText(status)}</span>
+    <div className="card">
+      <div className="kv">
+        <span>狀態</span>
+        <SyncDot text={syncStatusText(status)} ok={status.kind === 'idle' || status.kind === 'merged'} />
       </div>
-      <div className="set">
-        <span className="small">伺服器</span>
-        <span className="muted small" style={{ wordBreak: 'break-all' }}>
-          {config.endpoint}
-        </span>
+      <div className="kv">
+        <span>伺服器</span>
+        <span>{showKey ? config.endpoint : maskEndpoint(config.endpoint)}</span>
       </div>
-      <div className="set">
-        <span className="small">密鑰</span>
-        <span className="muted small" style={{ wordBreak: 'break-all' }}>
-          {showKey ? config.key : '••••••••••••••••••••••••••••••••'}
-        </span>
+      <div className="kv">
+        <span>密鑰</span>
+        <span>{showKey ? config.key : '••••••••••••••••••••••••••••••••'}</span>
       </div>
-      <div className="row" style={{ marginTop: 10 }}>
-        <button type="button" className="ghost" onClick={() => void sync.syncNow()}>
+      <div className="row">
+        <button type="button" className="btn" onClick={() => void sync.syncNow()}>
           立即同步
         </button>
-        <button type="button" className="ghost" onClick={() => setShowKey((v) => !v)}>
-          {showKey ? '隱藏密鑰' : '顯示密鑰'}
+        <button type="button" className="btn" onClick={() => setShowKey((v) => !v)}>
+          {showKey ? '隱藏密鑰與網址' : '顯示密鑰與網址'}
         </button>
       </div>
 
-      <div className="sec">
+      <div className="sub">
         <h3>我的另一台裝置</h3>
-        <p className="muted small">
+        <p className="muted">
           複製設定連結，用 AirDrop 或訊息傳到自己的另一台，在那台打開就會問要不要連上
           同一份進度。比手打 32 個字元快得多。
         </p>
         <div className="row">
           <button
             type="button"
-            className="ghost"
+            className="btn"
             onClick={() => void copy(buildSetupLink(config), '設定連結已複製')}
           >
             複製設定連結
           </button>
           <button
             type="button"
-            className="ghost"
+            className="btn"
             onClick={() => void copy(config.key, '密鑰已複製')}
           >
             只複製密鑰
           </button>
         </div>
-        <p className="small" style={{ color: 'var(--bad)' }}>
+        <p className="warn">
           這個連結裡含密鑰，等於憑證。只傳給自己，不要傳給別人。
         </p>
       </div>
 
-      <div className="sec">
+      <div className="sub">
         <h3>分享給別人</h3>
-        <p className="muted small">
+        <p className="muted">
           這個 App 沒有帳號系統——<strong>密鑰就是帳號</strong>。別人打開邀請連結會產生
           自己的一組密鑰，進度跟你完全分開，互不影響。
         </p>
         <div className="row">
           <button
             type="button"
-            className="ghost"
+            className="btn"
             onClick={() => void copy(buildInviteLink(config.endpoint), '邀請連結已複製')}
           >
             複製邀請連結（不含密鑰）
           </button>
         </div>
-        <p className="muted small">
+        <p className="muted">
           對方會用你這台同步伺服器。造句批改也算在你的 API key 上，一人一天最多 50 次。
         </p>
       </div>
 
-      {copied ? <p className="muted small">{copied}</p> : null}
+      {copied ? <p className="muted">{copied}</p> : null}
 
-      <div className="row" style={{ marginTop: 10 }}>
+      <div className="row">
         <button
           type="button"
-          className="ghost"
+          className="btn"
           onClick={() => {
             if (window.confirm('關掉同步？這台的進度會留著，雲端那份也會留著。')) {
               void sync.disable(false)
@@ -178,7 +185,7 @@ export function SyncPanel({ sync }: Props) {
         </button>
         <button
           type="button"
-          className="ghost"
+          className="btn"
           onClick={() => {
             if (window.confirm('關掉同步並刪掉雲端那份？其他裝置下次開啟就同步不到了。')) {
               void sync.disable(true)

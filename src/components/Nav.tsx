@@ -8,15 +8,15 @@ const TABS: { id: TabId; glyph: string; label: string }[] = [
   { id: 'stats', glyph: '録', label: '紀錄' },
 ]
 
+/** 同一份導覽：手機是底部分頁列，電腦版由 CSS 排成側邊欄的直列 */
 export function Nav({ view, onGo }: { view: string; onGo: (tab: TabId) => void }) {
   return (
-    <nav className="nav">
-      <div className="in">
+    <nav className="nav" aria-label="主選單">
+      <div className="nav-in">
         {TABS.map((t) => (
           <button
             key={t.id}
             type="button"
-            className={view === t.id ? 'on' : ''}
             aria-current={view === t.id ? 'page' : undefined}
             onClick={() => onGo(t.id)}
           >

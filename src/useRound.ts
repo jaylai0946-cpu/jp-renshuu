@@ -32,6 +32,10 @@ export interface RoundState {
   q: Question | null
   /** 這一項是介紹卡不是題目 */
   intro: boolean
+  /** 連續答對幾題，答錯歸零。只是顯示用 */
+  combo: number
+  /** 剛答完這題拿到幾點，回饋面板顯示用 */
+  gained: number
 }
 
 export interface RoundSummary {
@@ -67,9 +71,10 @@ export function useRound(state: AppState, setState: (fn: (s: AppState) => AppSta
       idx: number,
       first: Record<string, boolean>,
       xp: number,
+      combo: number,
     ): RoundState => {
       const entry = queue[idx]
-      const base = { queue, idx, first, xp, answered: false, picked: null }
+      const base = { queue, idx, first, xp, combo, gained: 0, answered: false, picked: null }
 
       if (entry.kind === 'intro') {
         if (current.settings.sound) setTimeout(() => speakItem(entry.id, true), 250)
@@ -87,7 +92,7 @@ export function useRound(state: AppState, setState: (fn: (s: AppState) => AppSta
     (r: RoundState, current: AppState) => {
       const idx = r.idx + 1
       if (idx < r.queue.length) {
-        setRound(prepare(current, r.queue, idx, r.first, r.xp))
+        setRound(prepare(current, r.queue, idx, r.first, r.xp, r.combo))
         return
       }
       const ids = Object.keys(r.first)
@@ -107,7 +112,7 @@ export function useRound(state: AppState, setState: (fn: (s: AppState) => AppSta
       const queue = buildRound(state, opt, ymd())
       if (!queue.length) return false
       setSummary(null)
-      setRound(prepare(state, queue, 0, {}, 0))
+      setRound(prepare(state, queue, 0, {}, 0, 0))
       return true
     },
     [prepare, state],
@@ -135,6 +140,7 @@ export function useRound(state: AppState, setState: (fn: (s: AppState) => AppSta
       const ok = choice === q.answer
       const isFirst = !(q.id in round.first)
       const isRetry = entry.kind === 'quiz' && entry.retry === true
+      const gained = ok ? (isFirst ? XP_FIRST_CORRECT : XP_RETRY_CORRECT) : 0
 
       setState((s) => answerQuestion(s, q.id, ok, isFirst, ymd()))
       speakItem(q.id, state.settings.sound)
@@ -148,7 +154,9 @@ export function useRound(state: AppState, setState: (fn: (s: AppState) => AppSta
         first: isFirst ? { ...round.first, [q.id]: ok } : round.first,
         answered: true,
         picked: choice,
-        xp: round.xp + (ok ? (isFirst ? XP_FIRST_CORRECT : XP_RETRY_CORRECT) : 0),
+        xp: round.xp + gained,
+        gained,
+        combo: ok ? round.combo + 1 : 0,
       })
     },
     [round, setState, state.settings.sound, state.settings.haptics],
@@ -174,6 +182,8 @@ export function useRound(state: AppState, setState: (fn: (s: AppState) => AppSta
         first: isFirst ? { ...round.first, [id]: verdict !== 'bad' } : round.first,
         answered: true,
         xp: round.xp + (verdict === 'ok' ? XP_FIRST_CORRECT : 0),
+        gained: verdict === 'ok' ? XP_FIRST_CORRECT : 0,
+        combo: verdict === 'bad' ? 0 : round.combo + 1,
       })
     },
     [round, setState, state.settings.haptics],

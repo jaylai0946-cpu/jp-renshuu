@@ -1,26 +1,30 @@
 import { useState } from 'react'
-import { BATCH_SIZE_CHOICES, NEW_PER_DAY_CHOICES, WRITE_PER_DAY_CHOICES } from '../constants'
+import { BATCH_SIZE_CHOICES, NEW_PER_DAY_CHOICES, THEME_CHOICES, WRITE_PER_DAY_CHOICES } from '../constants'
 import { ITEMS } from '../data/units'
 import { addDays } from '../lib/dates'
 import { importLegacy } from '../lib/legacyImport'
 import { exportJSON, importJSON } from '../lib/storage'
-import { practiced, streak } from '../lib/srs'
+import { practiced } from '../lib/srs'
 import type { AppState } from '../types'
 import type { useSync } from '../useSync'
-import { Hanko } from './Hanko'
 import { SyncPanel } from './SyncPanel'
+import { PageHead, StreakPill, XpPill } from './ui'
+
+const WEEKDAY = ['日', '一', '二', '三', '四', '五', '六']
 
 interface Props {
   state: AppState
   today: string
   sync: ReturnType<typeof useSync>
+  streak: number
+  xp: number
   onSetting: <K extends keyof AppState['settings']>(k: K, v: AppState['settings'][K]) => void
   onReplaceState: (next: AppState) => void
   onLogout: () => void
   onAbout: () => void
 }
 
-export function Stats({ state, today, sync, onSetting, onReplaceState, onLogout, onAbout }: Props) {
+export function Stats({ state, today, sync, streak, xp, onSetting, onReplaceState, onLogout, onAbout }: Props) {
   const [paste, setPaste] = useState('')
   const [message, setMessage] = useState<{ tone: 'ok' | 'bad'; text: string } | null>(null)
 
@@ -31,15 +35,21 @@ export function Stats({ state, today, sync, onSetting, onReplaceState, onLogout,
     learned++
     if (state.items[id].b >= 4) mastered++
   }
-  let xp = 0
   let days = 0
   for (const h of Object.values(state.hist)) {
-    xp += h.xp
     if (practiced(h)) days++
   }
 
   const start = addDays(today, -27)
   const calendar = Array.from({ length: 28 }, (_, i) => addDays(start, i))
+  const startDow = new Date(`${start}T12:00:00`).getDay()
+  const md = (day: string) => {
+    const [, m, d] = day.split('-').map(Number)
+    return { m, d }
+  }
+  const from = md(start)
+  const to = md(today)
+  const range = from.m === to.m ? `${from.m} 月 ${from.d} 日 – ${to.d} 日` : `${from.m}/${from.d} – ${to.m}/${to.d}`
 
   const CONFIRM = '匯入會蓋掉這台目前的進度（同步開著的話也會推到雲端）。確定要匯入嗎？'
 
@@ -76,41 +86,86 @@ export function Stats({ state, today, sync, onSetting, onReplaceState, onLogout,
 
   return (
     <>
-      <div className="bigstats">
-        <Hanko glyph={String(streak(state, today))} caption="連續天數" />
-        <dl>
-          <dt>學過的字</dt>
-          <dd>{learned}</dd>
-          <dt>熟練的字</dt>
-          <dd>{mastered}</dd>
-          <dt>練習天數</dt>
-          <dd>{days}</dd>
-          <dt>總點數</dt>
-          <dd>{xp}</dd>
-        </dl>
-      </div>
+      <PageHead
+        title="紀錄"
+        right={
+          <div className="pills m-only">
+            <StreakPill days={streak} />
+            <XpPill xp={xp} />
+          </div>
+        }
+      />
 
-      <div className="sec">
-        <h3>最近四週</h3>
-        <div className="cal">
-          {calendar.map((d) => {
-            const on = practiced(state.hist[d])
-            return (
-              <div
-                key={d}
-                className={`${on ? 'on' : ''}${d === today ? ' today' : ''}`}
-                title={d}
-              >
-                {on ? '済' : Number(d.slice(8))}
-              </div>
-            )
-          })}
+      <div className="record-grid">
+        <div className="record-l stack">
+          <div className="tiles4">
+            <div className="stat t-red">
+              <b>{learned}</b>
+              <span>學過的字</span>
+            </div>
+            <div className="stat t-green">
+              <b>{mastered}</b>
+              <span>熟練的字</span>
+            </div>
+            <div className="stat t-blue">
+              <b>{days}</b>
+              <span>練習天數</span>
+            </div>
+            <div className="stat t-yellow">
+              <b>{xp}</b>
+              <span>總點數</span>
+            </div>
+          </div>
+
+          <section className="card cal-card">
+            <div className="cal-head">
+              <h2>最近四週</h2>
+              <span>{range}</span>
+            </div>
+            <div className="cal">
+              {Array.from({ length: 7 }, (_, i) => (
+                <span className="dow" key={i}>
+                  {WEEKDAY[(startDow + i) % 7]}
+                </span>
+              ))}
+              {calendar.map((d) => {
+                const on = practiced(state.hist[d])
+                return (
+                  <div
+                    key={d}
+                    className={`day${on ? ' on' : ''}${d === today ? ' today' : ''}`}
+                    title={d}
+                  >
+                    {on ? '済' : Number(d.slice(8))}
+                  </div>
+                )
+              })}
+            </div>
+          </section>
         </div>
-      </div>
 
-      <div className="sec">
-        <h3>設定</h3>
-        <div className="panel">
+        <div className="record-r stack">
+      <div>
+        <h2 className="sec-title">設定</h2>
+        <div className="card">
+          <div className="set">
+            <span>
+              外觀
+              <small>自動 = 跟著裝置的深色模式</small>
+            </span>
+            <div className="seg sm" role="group" aria-label="外觀">
+              {THEME_CHOICES.map((t) => (
+                <button
+                  type="button"
+                  key={t.id}
+                  aria-pressed={state.settings.theme === t.id}
+                  onClick={() => onSetting('theme', t.id)}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          </div>
           <div className="set">
             <label htmlFor="npd">每天新學幾個</label>
             <select
@@ -128,8 +183,7 @@ export function Stats({ state, today, sync, onSetting, onReplaceState, onLogout,
           <div className="set">
             <label htmlFor="batch">
               一次教幾個
-              <br />
-              <small className="muted">連續介紹這麼多個新字，再集中出這批的題目</small>
+              <small>連續介紹這麼多個新字，再集中出這批的題目</small>
             </label>
             <select
               id="batch"
@@ -157,8 +211,7 @@ export function Stats({ state, today, sync, onSetting, onReplaceState, onLogout,
           <div className="set">
             <label htmlFor="wpd">
               每天幾題默寫
-              <br />
-              <small className="muted">辨識熟了的字才會出。0 是關掉</small>
+              <small>辨識熟了的字才會出。0 是關掉</small>
             </label>
             <select
               id="wpd"
@@ -175,8 +228,7 @@ export function Stats({ state, today, sync, onSetting, onReplaceState, onLogout,
           <div className="set">
             <span>
               只用 Apple Pencil 書寫
-              <br />
-              <small className="muted">開著時手指和手掌碰到畫布不會畫出線，滑鼠照樣能寫。平板沒有筆就關掉</small>
+              <small>開著時手指和手掌碰到畫布不會畫出線，滑鼠照樣能寫。平板沒有筆就關掉</small>
             </span>
             <button
               type="button"
@@ -190,8 +242,7 @@ export function Stats({ state, today, sync, onSetting, onReplaceState, onLogout,
           <div className="set">
             <span>
               答對時震動一下
-              <br />
-              <small className="muted">iPhone 要 iOS 18 以上。iPad 沒有震動馬達</small>
+              <small>iPhone 要 iOS 18 以上。iPad 沒有震動馬達</small>
             </span>
             <button
               type="button"
@@ -216,14 +267,14 @@ export function Stats({ state, today, sync, onSetting, onReplaceState, onLogout,
         </div>
       </div>
 
-      <div className="sec">
-        <h3>手機與電腦同步</h3>
+      <div>
+        <h2 className="sec-title">手機與電腦同步</h2>
         <SyncPanel sync={sync} />
       </div>
 
-      <div className="sec">
-        <h3>搬進度</h3>
-        <div className="panel">
+      <div>
+        <h2 className="sec-title">搬進度</h2>
+        <div className="card">
           <p className="muted small">
             從 claude.ai 的舊版搬過來：請那邊的 Claude 把 <code>&lt;script id="state"&gt;</code>{' '}
             裡的 JSON 給你，貼進下面再按「匯入舊版進度」。
@@ -234,18 +285,17 @@ export function Stats({ state, today, sync, onSetting, onReplaceState, onLogout,
             onChange={(e) => setPaste(e.target.value)}
             placeholder='貼上 { "v":1, "items": ... }'
             spellCheck={false}
-            style={{ fontFamily: 'var(--ui)', fontSize: '0.85rem' }}
           />
-          <div className="row" style={{ marginTop: 10 }}>
-            <button type="button" className="ghost" onClick={importOld}>
+          <div className="row">
+            <button type="button" className="btn" onClick={importOld}>
               匯入舊版進度
             </button>
-            <button type="button" className="ghost" onClick={importBackup}>
+            <button type="button" className="btn" onClick={importBackup}>
               匯入備份
             </button>
           </div>
-          <div className="row" style={{ marginTop: 10 }}>
-            <button type="button" className="ghost" onClick={() => void copyExport()}>
+          <div className="row">
+            <button type="button" className="btn" onClick={() => void copyExport()}>
               匯出進度（複製）
             </button>
           </div>
@@ -255,14 +305,14 @@ export function Stats({ state, today, sync, onSetting, onReplaceState, onLogout,
         </div>
       </div>
 
-      <div className="sec">
-        <div className="row">
-          <button type="button" className="ghost" onClick={onAbout}>
-            關於這個 App
-          </button>
-          <button type="button" className="ghost" onClick={onLogout}>
-            登出
-          </button>
+      <div className="foot-links">
+        <button type="button" className="link" onClick={onAbout}>
+          關於這個 App
+        </button>
+        <button type="button" className="link danger" onClick={onLogout}>
+          登出
+        </button>
+      </div>
         </div>
       </div>
     </>

@@ -13,7 +13,9 @@ import { UNIT_BY_ID } from './data/units'
 import { answerWriting, applyProgressPatch, recordGrade, setSetting } from './lib/actions'
 import { ymd } from './lib/dates'
 import { vibrate } from './lib/haptics'
-import { markKnownPatch } from './lib/srs'
+import { markKnownPatch, nextNew, streak, todayCounts } from './lib/srs'
+import { applyTheme } from './lib/theme'
+import { Icon, StreakPill, SyncDot, XpPill } from './components/ui'
 import { generateKey, loadLocalOnly, parseSetupLink, saveLocalOnly } from './lib/sync'
 import { syncStatusText } from './lib/syncStatus'
 import { emptyState, loadState, saveState } from './lib/storage'
@@ -33,6 +35,10 @@ export default function App() {
   const [fromLink] = useState(() => parseSetupLink(window.location.hash) !== null)
 
   useEffect(() => saveState(state), [state])
+
+  // 外觀跟著設定走。同步帶進別台的設定也會在這裡生效
+  const theme = state.settings.theme
+  useEffect(() => applyTheme(theme), [theme])
 
   // 跨午夜還開著時，日期要跟著跳，不然「今天」會停在昨天
   useEffect(() => {
@@ -139,40 +145,36 @@ export default function App() {
   // ---- 還沒登入也還沒選「只存這台」：先出登入頁 ----
   if (!sync.config && !localOnly && !fromLink) {
     return (
-      <div className="wrap">
-        <Login
-          onLogin={(endpoint, key) => sync.enable(endpoint, key)}
-          onSkip={() => {
-            saveLocalOnly(true)
-            setLocalOnly(true)
-          }}
-        />
-      </div>
+      <Login
+        onLogin={(endpoint, key) => sync.enable(endpoint, key)}
+        onSkip={() => {
+          saveLocalOnly(true)
+          setLocalOnly(true)
+        }}
+      />
     )
   }
 
-  // ---- 練習回合是全螢幕，沒有底部導覽 ----
+  // ---- 練習回合是專注模式，沒有導覽 ----
   if (round.round) {
     return (
-      <div className="wrap">
-        <Round
-          round={round.round}
-          state={state}
-          onLearn={round.learn}
-          onAnswer={round.answer}
-          onWrite={round.write}
-          onNext={round.next}
-          onSkip={round.skip}
-          onQuit={round.quit}
-          onSay={round.replay}
-        />
-      </div>
+      <Round
+        round={round.round}
+        state={state}
+        onLearn={round.learn}
+        onAnswer={round.answer}
+        onWrite={round.write}
+        onNext={round.next}
+        onSkip={round.skip}
+        onQuit={round.quit}
+        onSay={round.replay}
+      />
     )
   }
 
   if (round.summary) {
     return (
-      <div className="wrap">
+      <div className="focus">
         <Summary
           summary={round.summary}
           syncText={syncStatusText(sync.status)}
@@ -182,71 +184,107 @@ export default function App() {
     )
   }
 
+  const syncText = syncStatusText(sync.status)
+  const syncOk = sync.status.kind === 'idle' || sync.status.kind === 'merged'
+  const days = streak(state, today)
+  const xp = Object.values(state.hist).reduce((n, h) => n + h.xp, 0)
+  const counts = todayCounts(state, today)
+
+  /** 側邊欄的「開始練習」：今天有題就做今天的，做完了就多學幾個或隨機複習 */
+  function startAny() {
+    if (counts.questions > 0) start({ kind: 'daily' })
+    else if (nextNew(state, 1).length > 0) start({ kind: 'extra' })
+    else start({ kind: 'random' })
+  }
+
   return (
-    <div className="wrap">
-      <div className="top">
-        <h1 className="title">日文練習本</h1>
-        <span className="sync">{syncStatusText(sync.status)}</span>
-      </div>
+    <div className="shell">
+      <aside className="side">
+        <div className="side-brand">
+          <b>日文練習本</b>
+          <SyncDot text={syncText} ok={syncOk} />
+        </div>
+        <Nav view={view} onGo={go} />
+        <div className="side-foot">
+          <div className="pills">
+            <StreakPill days={days} suffix=" 天" />
+            <XpPill xp={xp} />
+          </div>
+          <button type="button" className="btn btn-red block" onClick={startAny}>
+            <Icon name="plus" />
+            開始練習
+          </button>
+        </div>
+      </aside>
 
-      {view === 'home' ? (
-        <Home
-          state={state}
-          today={today}
-          onStart={() => start({ kind: 'daily' })}
-          onExtra={() => start({ kind: 'extra' })}
-          onRandom={() => start({ kind: 'random' })}
-        />
-      ) : null}
+      <main className="main">
+        {view === 'home' ? (
+          <Home
+            state={state}
+            today={today}
+            streak={days}
+            xp={xp}
+            onStart={() => start({ kind: 'daily' })}
+            onExtra={() => start({ kind: 'extra' })}
+            onRandom={() => start({ kind: 'random' })}
+            onPracticeUnit={(unitId) => start({ kind: 'unit', unitId })}
+            onUnits={() => go('units')}
+          />
+        ) : null}
 
-      {view === 'units' ? (
-        <Units
-          state={state}
-          onPractice={(unitId) => start({ kind: 'unit', unitId })}
-          onMarkKnown={markKnown}
-        />
-      ) : null}
+        {view === 'units' ? (
+          <Units
+            state={state}
+            syncText={syncText}
+            syncOk={syncOk}
+            onPractice={(unitId) => start({ kind: 'unit', unitId })}
+            onMarkKnown={markKnown}
+          />
+        ) : null}
 
-      {view === 'write' ? (
-        <Handwriting
-          state={state}
-          onSetting={(k, v) => setState((s) => setSetting(s, k, v))}
-          onWrite={(id, verdict) => {
-            setState((s) => {
-              // 在手寫分頁自由練習也算數，但只有「還沒寫過或今天到期」的才動盒子，
-              // 不然反覆寫同一個字會一路把盒子推到 6
-              const p = s.write[id]
-              const counts = !p || p.due <= ymd()
-              return answerWriting(s, id, verdict, counts, ymd())
-            })
-            // 寫字是在畫布上放開筆，不是點 label，所以只有 Android 會震
-            if (verdict === 'ok') vibrate(state.settings.haptics)
-          }}
-        />
-      ) : null}
+        {view === 'write' ? (
+          <Handwriting
+            state={state}
+            syncText={syncText}
+            syncOk={syncOk}
+            onSetting={(k, v) => setState((s) => setSetting(s, k, v))}
+            onWrite={(id, verdict) => {
+              setState((s) => {
+                // 在手寫分頁自由練習也算數，但只有「還沒寫過或今天到期」的才動盒子，
+                // 不然反覆寫同一個字會一路把盒子推到 6
+                const p = s.write[id]
+                const counts = !p || p.due <= ymd()
+                return answerWriting(s, id, verdict, counts, ymd())
+              })
+              // 寫字是在畫布上放開筆，不是點 label，所以只有 Android 會震
+              if (verdict === 'ok') vibrate(state.settings.haptics)
+            }}
+          />
+        ) : null}
 
-      {view === 'compose' ? (
-        <Compose
-          config={sync.config}
-          onGraded={() => setState((s) => recordGrade(s, ymd()))}
-        />
-      ) : null}
+        {view === 'compose' ? (
+          <Compose
+            config={sync.config}
+            onGraded={() => setState((s) => recordGrade(s, ymd()))}
+          />
+        ) : null}
 
-      {view === 'stats' ? (
-        <Stats
-          state={state}
-          today={today}
-          sync={sync}
-          onSetting={(k, v) => setState((s) => setSetting(s, k, v))}
-          onReplaceState={(next) => setState(next)}
-          onLogout={logout}
-          onAbout={() => go('about')}
-        />
-      ) : null}
+        {view === 'stats' ? (
+          <Stats
+            state={state}
+            today={today}
+            sync={sync}
+            streak={days}
+            xp={xp}
+            onSetting={(k, v) => setState((s) => setSetting(s, k, v))}
+            onReplaceState={(next) => setState(next)}
+            onLogout={logout}
+            onAbout={() => go('about')}
+          />
+        ) : null}
 
-      {view === 'about' ? <About onBack={() => go('stats')} /> : null}
-
-      <Nav view={view} onGo={go} />
+        {view === 'about' ? <About onBack={() => go('stats')} /> : null}
+      </main>
     </div>
   )
 }

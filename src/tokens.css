@@ -1,0 +1,90 @@
+/* 日文練習本 A 版 design tokens
+   淺色為預設；深色跟隨系統 prefers-color-scheme，
+   或在 <html> 設 data-theme="light" / "dark" 手動覆蓋（紀錄 > 外觀）。
+   固定色（不隨主題變）：coral #D93A2E、green #188A48、blue #2F6FE0、purple #7B4FD6、amber #B86E00、flame #FF7A1A、yellow #FFC531（小標籤/外框用）。 */
+:root{
+  --bg: #FFF7EA;
+  --surface: #FFFFFF;
+  --ink-fill: #231F33;
+  --on-ink: #FFFFFF;
+  --tint-orange: #FFE9D6;
+  --tint-yellow: #FFF3C4;
+  --tint-red: #FFE1DE;
+  --tint-green: #DDF5E6;
+  --tint-blue: #E3EDFF;
+  --track: #F3EADA;
+  --paper: #FFFDF7;
+  --off: #E4DACB;
+  --hero: #FFC531;
+  --text: #231F33;
+  --muted: #6B6480;
+  --green-text: #0F6B36;
+  --red-text: #A82A20;
+  --blue-text: #2F6FE0;
+  --coral-text: #D93A2E;
+  --faint: #8A829C;
+  --ghost: #E4DACB;
+  --edge: #231F33;
+  --line: #EADFCB;
+  --dash: #C9BBA2;
+  --grid: #F2B8B2;
+  --icon: #231F33;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+  --bg: #1E1A29;
+  --surface: #2C273B;
+  --ink-fill: #F4EFE6;
+  --on-ink: #1E1A29;
+  --tint-orange: #45301F;
+  --tint-yellow: #403620;
+  --tint-red: #4A2524;
+  --tint-green: #1B4030;
+  --tint-blue: #213257;
+  --track: #3A3450;
+  --paper: #252033;
+  --off: #423B58;
+  --hero: #4A3C18;
+  --text: #F4EFE6;
+  --muted: #B3ACC7;
+  --green-text: #7BDDA2;
+  --red-text: #FF9C92;
+  --blue-text: #9DBDFF;
+  --coral-text: #FF7B6F;
+  --faint: #857E9C;
+  --ghost: #3A3450;
+  --edge: #000000;
+  --line: #423B58;
+  --dash: #5A5275;
+  --grid: #6A4450;
+  --icon: #F4EFE6;
+  }
+}
+:root[data-theme="dark"]{
+  --bg: #1E1A29;
+  --surface: #2C273B;
+  --ink-fill: #F4EFE6;
+  --on-ink: #1E1A29;
+  --tint-orange: #45301F;
+  --tint-yellow: #403620;
+  --tint-red: #4A2524;
+  --tint-green: #1B4030;
+  --tint-blue: #213257;
+  --track: #3A3450;
+  --paper: #252033;
+  --off: #423B58;
+  --hero: #4A3C18;
+  --text: #F4EFE6;
+  --muted: #B3ACC7;
+  --green-text: #7BDDA2;
+  --red-text: #FF9C92;
+  --blue-text: #9DBDFF;
+  --coral-text: #FF7B6F;
+  --faint: #857E9C;
+  --ghost: #3A3450;
+  --edge: #000000;
+  --line: #423B58;
+  --dash: #5A5275;
+  --grid: #6A4450;
+  --icon: #F4EFE6;
+}

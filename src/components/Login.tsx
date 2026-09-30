@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { DEFAULT_SYNC_ENDPOINT } from '../constants'
 import { deriveKey, validateName, validatePassword } from '../lib/account'
 import { pull, validateEndpoint, type SyncConfig } from '../lib/sync'
-import { Hanko } from './Hanko'
+import { Tile } from './ui'
 
 interface Props {
   /** 登入成功：上層拿去 enable 同步 */
@@ -69,15 +69,14 @@ export function Login({ onLogin, onSkip }: Props) {
 
   return (
     <div className="login">
-      <div className="center" style={{ marginBottom: 26 }}>
-        <Hanko glyph="日" caption="練習本" big />
-        <h1 className="title" style={{ marginTop: 18 }}>
-          日文練習本
-        </h1>
-        <p className="muted small">輸入名字和密碼，就能在所有裝置上用同一份進度。</p>
+      <div className="login-brand">
+        <Tile glyph="日" color="var(--coral)" size="lg" />
+        <h1>日文練習本</h1>
+        <p>輸入名字和密碼，就能在所有裝置上用同一份進度。</p>
       </div>
 
       <form
+        className="card"
         onSubmit={(e) => {
           e.preventDefault()
           void submit()
@@ -85,7 +84,7 @@ export function Login({ onLogin, onSkip }: Props) {
       >
         {needsEndpoint ? (
           <>
-            <label className="small muted" htmlFor="login-endpoint">
+            <label htmlFor="login-endpoint">
               同步伺服器網址
             </label>
             <input
@@ -100,7 +99,7 @@ export function Login({ onLogin, onSkip }: Props) {
           </>
         ) : null}
 
-        <label className="small muted" htmlFor="login-name">
+        <label htmlFor="login-name">
           名字
         </label>
         <input
@@ -114,49 +113,51 @@ export function Login({ onLogin, onSkip }: Props) {
           spellCheck={false}
         />
 
-        <label className="small muted" htmlFor="login-password">
+        <label htmlFor="login-password">
           密碼
         </label>
-        <input
-          id="login-password"
-          type={showPassword ? 'text' : 'password'}
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          placeholder="至少 8 個字"
-          autoComplete="current-password"
-        />
-
-        <div className="row" style={{ marginBottom: 14 }}>
-          <button type="button" className="ghost" onClick={() => setShowPassword((v) => !v)}>
+        <div className="pwrow">
+          <input
+            id="login-password"
+            type={showPassword ? 'text' : 'password'}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="至少 8 個字"
+            autoComplete="current-password"
+          />
+          <button
+            type="button"
+            className="btn btn-sm"
+            aria-pressed={showPassword}
+            onClick={() => setShowPassword((v) => !v)}
+          >
             {showPassword ? '隱藏密碼' : '顯示密碼'}
           </button>
         </div>
 
-        <button type="submit" className="primary" disabled={busy}>
+        <button type="submit" className="btn btn-red block" disabled={busy}>
           {busy ? '登入中…' : '登入 / 建立'}
         </button>
       </form>
 
       {error ? <p className="err">{error}</p> : null}
 
-      <div className="panel sec">
-        <p className="small" style={{ margin: 0 }}>
+      <div className="card flat">
+        <p>
           <strong>沒有伺服器在核對密碼。</strong>
           名字和密碼是在你的裝置上算成一組密鑰，伺服器只看得到那組密鑰、不知道你是誰。
         </p>
-        <p className="small" style={{ color: 'var(--bad)' }}>
+        <p className="warn">
           所以密碼就是帳號：猜中的人就拿得到你的進度。用長一點的，也不要跟別的服務共用。
         </p>
-        <p className="muted small" style={{ marginBottom: 0 }}>
+        <p className="muted" style={{ marginBottom: 0 }}>
           忘記密碼沒辦法救——沒有人有那份資料可以幫你重設。
         </p>
       </div>
 
-      <div className="sec">
-        <button type="button" className="ghost" onClick={onSkip} style={{ width: '100%' }}>
-          先不同步，只存在這台裝置
-        </button>
-      </div>
+      <button type="button" className="btn btn-soft block" onClick={onSkip}>
+        先不同步，只存在這台裝置
+      </button>
     </div>
   )
 }
