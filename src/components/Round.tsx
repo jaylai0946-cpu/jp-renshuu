@@ -1,8 +1,10 @@
 import { ITEMS, UNIT_BY_ID } from '../data/units'
 import type { RoundState } from '../useRound'
 import type { AppState, WordItem } from '../types'
+import { HAPTIC_SWITCH_ID } from '../lib/haptics'
 import type { Verdict } from '../lib/score'
 import { Cells } from './Cells'
+import { HapticSwitch } from './HapticSwitch'
 import { WritingPad } from './WritingPad'
 
 interface Props {
@@ -136,6 +138,7 @@ export function Round({ round, state, onLearn, onAnswer, onWrite, onNext, onQuit
   return (
     <>
       {top}
+      {state.settings.haptics ? <HapticSwitch /> : null}
       <p className="ask">
         {ASK[q.mode]}
         {tag}
@@ -182,18 +185,33 @@ export function Round({ round, state, onLearn, onAnswer, onWrite, onNext, onQuit
             q.mode === 'zh2jp'
               ? (UNIT_BY_ID[item.u].items as WordItem[]).find((x) => x.jp === c)
               : undefined
+          // iPhone 的震動只能由使用者真的點到開關的 label 觸發，所以只在正確答案上蓋一層。
+          // 點錯的選項沒有這層，自然不會震
+          // 答完之後不拆掉，只讓它點不到：label 的「切換開關」發生在 click 事件跑完之後，
+          // 如果 onAnswer 觸發的重繪先把 label 拆了，開關就不會切、也就不會震
+          const haptic = state.settings.haptics && c === q.answer
           return (
-            <button
-              type="button"
-              key={c}
-              className={`choice${choiceClass}${mark}`}
-              lang={choiceClass ? 'ja' : undefined}
-              disabled={round.answered}
-              onClick={() => onAnswer(c)}
-            >
-              {c}
-              {word && word.jp !== word.kana ? <small>{word.kana}</small> : null}
-            </button>
+            <div className="choicewrap" key={c}>
+              <button
+                type="button"
+                className={`choice${choiceClass}${mark}`}
+                lang={choiceClass ? 'ja' : undefined}
+                disabled={round.answered}
+                onClick={() => onAnswer(c)}
+              >
+                {c}
+                {word && word.jp !== word.kana ? <small>{word.kana}</small> : null}
+              </button>
+              {haptic ? (
+                <label
+                  className={`haptic-hit${round.answered ? ' off' : ''}`}
+                  htmlFor={HAPTIC_SWITCH_ID}
+                  aria-hidden="true"
+                  data-testid="haptic-hit"
+                  onClick={() => onAnswer(c)}
+                />
+              ) : null}
+            </div>
           )
         })}
       </div>

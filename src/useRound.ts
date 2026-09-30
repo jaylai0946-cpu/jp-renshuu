@@ -8,6 +8,7 @@ import {
   learnNew,
 } from './lib/actions'
 import { ymd } from './lib/dates'
+import { vibrate } from './lib/haptics'
 import type { Verdict } from './lib/score'
 import { speak } from './lib/speech'
 import {
@@ -137,6 +138,8 @@ export function useRound(state: AppState, setState: (fn: (s: AppState) => AppSta
 
       setState((s) => answerQuestion(s, q.id, ok, isFirst, ymd()))
       speakItem(q.id, state.settings.sound)
+      // Android 在這裡震。iPhone 靠正確選項上那層 label 切換隱形開關，這行在 iOS 上什麼都不做
+      if (ok) vibrate(state.settings.haptics)
 
       setRound({
         ...round,
@@ -148,7 +151,7 @@ export function useRound(state: AppState, setState: (fn: (s: AppState) => AppSta
         xp: round.xp + (ok ? (isFirst ? XP_FIRST_CORRECT : XP_RETRY_CORRECT) : 0),
       })
     },
-    [round, setState, state.settings.sound],
+    [round, setState, state.settings.sound, state.settings.haptics],
   )
 
   /**
@@ -164,6 +167,7 @@ export function useRound(state: AppState, setState: (fn: (s: AppState) => AppSta
       const isFirst = !(id in round.first)
 
       setState((s) => answerWriting(s, id, verdict, isFirst, ymd()))
+      if (verdict === 'ok') vibrate(state.settings.haptics)
 
       setRound({
         ...round,
@@ -172,7 +176,7 @@ export function useRound(state: AppState, setState: (fn: (s: AppState) => AppSta
         xp: round.xp + (verdict === 'ok' ? XP_FIRST_CORRECT : 0),
       })
     },
-    [round, setState],
+    [round, setState, state.settings.haptics],
   )
 
   const next = useCallback(() => {

@@ -512,6 +512,33 @@ input:focus-visible {
   cursor: default;
 }
 
+/* ---- 答對震動（iPhone 用隱形開關，見 lib/haptics.ts） ---- */
+/* 不能 display:none，不然 label 點了不會切換 */
+.haptic-switch {
+  position: fixed;
+  left: -100px;
+  top: -100px;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+.choicewrap {
+  position: relative;
+  display: grid;
+}
+/* 蓋在正確選項上的透明 label：點它＝點那個選項，順便切一下開關讓 iPhone 震 */
+.haptic-hit {
+  position: absolute;
+  inset: 0;
+  border-radius: 12px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.haptic-hit.off {
+  pointer-events: none;
+}
+
 .feedback {
   position: fixed;
   left: 0;

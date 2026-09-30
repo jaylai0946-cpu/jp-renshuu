@@ -61,6 +61,7 @@ function settings(raw: unknown): Settings {
     penOnly: bool(r.penOnly, DEFAULT_SETTINGS.penOnly),
     writePerDay: int(r.writePerDay, DEFAULT_SETTINGS.writePerDay, 0, 30),
     batchSize: int(r.batchSize, DEFAULT_SETTINGS.batchSize, 1, 20),
+    haptics: bool(r.haptics, DEFAULT_SETTINGS.haptics),
   }
 }
 

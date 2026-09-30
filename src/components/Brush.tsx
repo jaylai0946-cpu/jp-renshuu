@@ -7,17 +7,20 @@ export type Verdict = 'ok' | 'shape' | 'bad'
 export interface BrushProps {
   /** 畫布邊長（CSS px）。田字格是正方形 */
   size: number
-  /** 只讓 Apple Pencil 畫得出線。開著時手指和手掌碰到不會留下痕跡 */
+  /**
+   * 擋掉觸控。開著時手指和手掌碰到不會留下痕跡。
+   * 滑鼠和觸控板照常能寫——它們不會是壓在螢幕上的手掌，擋了只會讓筆電完全寫不了
+   */
   penOnly: boolean
   /** 已經寫完的筆畫，座標是畫布的 CSS px。由上層拿著，才好做復原和清除 */
   strokes: InkPoint[][]
-  /** 寫完一筆 */
-  onStroke: (points: InkPoint[]) => void
+  /** 寫完一筆。byPen 是這一筆是不是 Apple Pencil 寫的，上層拿來決定判分鬆緊 */
+  onStroke: (points: InkPoint[], byPen: boolean) => void
   /** 描寫模式的淡範本，座標在 KanjiVG 的 109×109 */
   ghost?: Point[][]
   /** 每一筆的判分結果，長度對齊 strokes。階段 3 會用到 */
   verdicts?: Verdict[]
-  /** 使用者用手指碰但 penOnly 開著時呼叫，上層用來提示 */
+  /** 使用者用手指碰但 penOnly 開著時呼叫，上層用來提示。滑鼠不會觸發 */
   onPenOnlyBlocked?: () => void
 }
 
@@ -37,7 +40,7 @@ const COLOR: Record<Verdict | 'ink', string> = {
  *
  * iPad 上最容易出事的幾件事都在這裡處理：
  * - touch-action: none（CSS 裡），寫字時頁面不能跟著捲
- * - penOnly 時只收 pointerType === 'pen'，手掌壓上去不會畫出一條線
+ * - penOnly 時擋掉 pointerType === 'touch'，手掌壓上去不會畫出一條線（滑鼠照收）
  * - getCoalescedEvents() 把兩次 move 之間被合併掉的點補回來，線條才平順
  * - pressure 改筆畫粗細；滑鼠和手指不回報壓力，給固定值免得變成 0 寬度
  * - devicePixelRatio 縮放，Retina 上才不糊
@@ -61,6 +64,7 @@ export function Brush({
   const liveRef = useRef<InkPoint[] | null>(null)
   /** 正在寫的是哪一根筆／手指。同時只收一個，第二根不理 */
   const pointerRef = useRef<number | null>(null)
+  const byPenRef = useRef(false)
 
   const context = useCallback((): CanvasRenderingContext2D | null => {
     const ctx = canvasRef.current?.getContext('2d') ?? null
@@ -150,11 +154,12 @@ export function Brush({
 
   function handleDown(e: React.PointerEvent<HTMLCanvasElement>) {
     if (pointerRef.current !== null) return
-    if (penOnly && e.pointerType !== 'pen') {
+    if (penOnly && e.pointerType === 'touch') {
       onPenOnlyBlocked?.()
       return
     }
     e.preventDefault()
+    byPenRef.current = e.pointerType === 'pen'
 
     const canvas = canvasRef.current
     if (!canvas) return
@@ -200,7 +205,7 @@ export function Brush({
     if (canvas?.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId)
 
     // 交給上層收進 strokes，props 一變 redraw 就會把它畫成正式的筆畫
-    if (keep && points?.length) onStroke(points)
+    if (keep && points?.length) onStroke(points, byPenRef.current)
     else redraw()
   }
 

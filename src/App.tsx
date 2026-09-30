@@ -12,6 +12,7 @@ import { Units } from './components/Units'
 import { UNIT_BY_ID } from './data/units'
 import { answerWriting, applyProgressPatch, recordGrade, setSetting } from './lib/actions'
 import { ymd } from './lib/dates'
+import { vibrate } from './lib/haptics'
 import { markKnownPatch } from './lib/srs'
 import { generateKey, loadLocalOnly, parseSetupLink, saveLocalOnly } from './lib/sync'
 import { syncStatusText } from './lib/syncStatus'
@@ -209,7 +210,7 @@ export default function App() {
         <Handwriting
           state={state}
           onSetting={(k, v) => setState((s) => setSetting(s, k, v))}
-          onWrite={(id, verdict) =>
+          onWrite={(id, verdict) => {
             setState((s) => {
               // 在手寫分頁自由練習也算數，但只有「還沒寫過或今天到期」的才動盒子，
               // 不然反覆寫同一個字會一路把盒子推到 6
@@ -217,7 +218,9 @@ export default function App() {
               const counts = !p || p.due <= ymd()
               return answerWriting(s, id, verdict, counts, ymd())
             })
-          }
+            // 寫字是在畫布上放開筆，不是點 label，所以只有 Android 會震
+            if (verdict === 'ok') vibrate(state.settings.haptics)
+          }}
         />
       ) : null}
 

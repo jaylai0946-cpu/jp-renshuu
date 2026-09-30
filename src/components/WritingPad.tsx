@@ -61,6 +61,11 @@ export function WritingPad({
    */
   const [showGhost, setShowGhost] = useState(mode === 'trace')
   const [reported, setReported] = useState(false)
+  /**
+   * 這個字有沒有哪一筆不是用 Apple Pencil 寫的。
+   * penOnly 開著但人在筆電上用滑鼠寫，照筆的標準判會幾乎全錯，所以改用寬鬆的門檻
+   */
+  const [loose, setLoose] = useState(false)
 
   // 換字或換模式就整組重來
   const resetKey = `${text}|${mode}`
@@ -70,16 +75,22 @@ export function WritingPad({
     setCells(chars.map(emptyCell))
     setShowGhost(mode === 'trace')
     setReported(false)
+    setLoose(false)
   }
 
-  const thresholds = thresholdsFor(penOnly)
+  const thresholds = thresholdsFor(penOnly && !loose)
   const size = chars.length > 1 ? Math.round(cellSize * 0.82) : cellSize
 
   /**
    * 收下一筆。評分和 onJudged 都在 handler 裡算完才 setCells——
    * 寫進 updater 的話 StrictMode 會跑兩次，熟練度會被記兩次。
    */
-  function addStroke(cellIndex: number, points: InkPoint[]) {
+  function addStroke(cellIndex: number, points: InkPoint[], byPen: boolean) {
+    // 這一輪 render 的 thresholds 還是舊的，評分要用這一筆算進去之後的門檻
+    const nowLoose = loose || !byPen
+    if (nowLoose !== loose) setLoose(nowLoose)
+    const th = thresholdsFor(penOnly && !nowLoose)
+
     const next = cells.map((c, i) =>
       i === cellIndex ? { ...c, strokes: [...c.strokes, points] } : c,
     )
@@ -92,7 +103,7 @@ export function WritingPad({
 
     const scored = next.map((c, i) => ({
       ...c,
-      score: scoreCharacter(chars[i], c.strokes, size, thresholds),
+      score: scoreCharacter(chars[i], c.strokes, size, th),
     }))
     setCells(scored)
 
@@ -105,6 +116,7 @@ export function WritingPad({
   function reset() {
     setCells(chars.map(emptyCell))
     setReported(false)
+    setLoose(false)
   }
 
   function undo() {
@@ -141,7 +153,7 @@ export function WritingPad({
             strokes={cells[i].strokes}
             ghost={showGhost ? outlineFor(ch) : undefined}
             verdicts={verdictsFor(cells[i], ch)}
-            onStroke={(points) => addStroke(i, points)}
+            onStroke={(points, byPen) => addStroke(i, points, byPen)}
             onPenOnlyBlocked={onPenOnlyBlocked}
           />
         ))}

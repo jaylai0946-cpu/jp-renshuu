@@ -114,6 +114,95 @@ describe('App', () => {
     expect(saved.items['h:あ'].b).toBe(1)
   })
 
+  describe('答對震動', () => {
+    let buzz: ReturnType<typeof vi.fn>
+    beforeEach(() => {
+      buzz = vi.fn(() => true)
+      Object.defineProperty(navigator, 'vibrate', { value: buzz, configurable: true, writable: true })
+      seed((s) => {
+        s.settings.newPerDay = 0
+        s.settings.writePerDay = 0
+        s.items['h:あ'] = { b: 1, due: '2020-01-01', seen: 1, wrong: 0 }
+      })
+    })
+    afterEach(() => {
+      delete (navigator as { vibrate?: unknown }).vibrate
+    })
+
+    it('只有正確選項上有那層 label，而且連到隱形開關', () => {
+      render(<App />)
+      fireEvent.click(screen.getByRole('button', { name: '開始今日練習' }))
+
+      const hits = screen.getAllByTestId('haptic-hit')
+      expect(hits).toHaveLength(1)
+      expect(hits[0].parentElement!.textContent).toBe('a')
+      const sw = document.getElementById(hits[0].getAttribute('for')!) as HTMLInputElement
+      expect(sw.type).toBe('checkbox')
+      expect(sw.hasAttribute('switch')).toBe(true)
+    })
+
+    it('點正確選項（iPhone 實際點到的是 label）會答對並震一下', () => {
+      render(<App />)
+      fireEvent.click(screen.getByRole('button', { name: '開始今日練習' }))
+
+      const sw = document.querySelector<HTMLInputElement>('.haptic-switch')!
+      fireEvent.click(screen.getByTestId('haptic-hit'))
+
+      expect(screen.getByText('答對了')).toBeInTheDocument()
+      expect(sw.checked).toBe(true)
+      expect(buzz).toHaveBeenCalledTimes(1)
+      expect(buzz).toHaveBeenCalledWith(12)
+      const saved: AppState = JSON.parse(localStorage.getItem(STORAGE_KEY)!)
+      expect(saved.hist[ymd()]).toMatchObject({ n: 1, c: 1 })
+    })
+
+    it('答完之後 label 還在但點不到，開關切換才不會被重繪打斷', () => {
+      render(<App />)
+      fireEvent.click(screen.getByRole('button', { name: '開始今日練習' }))
+      fireEvent.click(screen.getByTestId('haptic-hit'))
+      expect(screen.getByTestId('haptic-hit')).toHaveClass('off')
+    })
+
+    it('答錯不震', () => {
+      render(<App />)
+      fireEvent.click(screen.getByRole('button', { name: '開始今日練習' }))
+      const wrong = screen
+        .getAllByRole('button')
+        .find((b) => b.className.includes('choice') && b.textContent !== 'a')!
+      fireEvent.click(wrong)
+
+      expect(screen.getByText('正確答案是：a')).toBeInTheDocument()
+      expect(buzz).not.toHaveBeenCalled()
+    })
+
+    it('設定關掉之後不震，也不放 label 和開關', () => {
+      seed((s) => {
+        s.settings.newPerDay = 0
+        s.settings.writePerDay = 0
+        s.settings.haptics = false
+        s.items['h:あ'] = { b: 1, due: '2020-01-01', seen: 1, wrong: 0 }
+      })
+      render(<App />)
+      fireEvent.click(screen.getByRole('button', { name: '開始今日練習' }))
+
+      expect(screen.queryByTestId('haptic-hit')).not.toBeInTheDocument()
+      expect(document.querySelector('.haptic-switch')).toBeNull()
+      fireEvent.click(screen.getByRole('button', { name: 'a' }))
+      expect(screen.getByText('答對了')).toBeInTheDocument()
+      expect(buzz).not.toHaveBeenCalled()
+    })
+
+    it('設定頁可以關掉', () => {
+      render(<App />)
+      fireEvent.click(screen.getByRole('button', { name: /紀錄/ }))
+      const toggle = screen.getByRole('switch', { name: '答對時震動一下' })
+      expect(toggle).toHaveAttribute('aria-checked', 'true')
+      fireEvent.click(toggle)
+      const saved: AppState = JSON.parse(localStorage.getItem(STORAGE_KEY)!)
+      expect(saved.settings.haptics).toBe(false)
+    })
+  })
+
   it('答錯的題目會在回合尾巴再出一次', () => {
     seed((s) => {
       s.settings.newPerDay = 0

@@ -17,6 +17,7 @@ export const DEFAULT_SETTINGS = {
    * 實際用起來也比較不會被打斷。
    */
   batchSize: 5,
+  haptics: true,
 } as const
 
 export const NEW_PER_DAY_CHOICES = [5, 10, 15, 20]

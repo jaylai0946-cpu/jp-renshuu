@@ -176,7 +176,7 @@ export function Stats({ state, today, sync, onSetting, onReplaceState, onLogout,
             <span>
               只用 Apple Pencil 書寫
               <br />
-              <small className="muted">開著時手掌碰到畫布不會畫出線。沒有筆就關掉</small>
+              <small className="muted">開著時手指和手掌碰到畫布不會畫出線，滑鼠照樣能寫。平板沒有筆就關掉</small>
             </span>
             <button
               type="button"
@@ -185,6 +185,21 @@ export function Stats({ state, today, sync, onSetting, onReplaceState, onLogout,
               aria-checked={state.settings.penOnly}
               aria-label="只用 Apple Pencil 書寫"
               onClick={() => onSetting('penOnly', !state.settings.penOnly)}
+            />
+          </div>
+          <div className="set">
+            <span>
+              答對時震動一下
+              <br />
+              <small className="muted">iPhone 要 iOS 18 以上。iPad 沒有震動馬達</small>
+            </span>
+            <button
+              type="button"
+              className={`toggle${state.settings.haptics ? ' on' : ''}`}
+              role="switch"
+              aria-checked={state.settings.haptics}
+              aria-label="答對時震動一下"
+              onClick={() => onSetting('haptics', !state.settings.haptics)}
             />
           </div>
           <div className="set">

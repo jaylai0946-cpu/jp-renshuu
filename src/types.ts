@@ -64,6 +64,8 @@ export interface Settings {
   writePerDay: number
   /** 一次連續介紹幾個新字，介紹完才集中出這批的題目 */
   batchSize: number
+  /** 答對時小震一下。iPad 沒有馬達，開了也不會震 */
+  haptics: boolean
 }
 
 export interface AppState {

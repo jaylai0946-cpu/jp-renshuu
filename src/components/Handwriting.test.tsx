@@ -151,6 +151,20 @@ describe('手寫分頁', () => {
     expect(saved.settings.penOnly).toBe(false)
   })
 
+  it('penOnly 開著時筆電的滑鼠照樣寫得出來，也不跳提示', () => {
+    // 回歸：以前 penOnly 擋掉所有不是筆的輸入，筆電完全寫不了字
+    openWriting()
+    fireEvent.click(screen.getByRole('button', { name: '描寫' }))
+    const canvas = screen.getByLabelText('手寫區')
+
+    fireEvent.pointerDown(canvas, { pointerId: 1, pointerType: 'mouse', clientX: 10, clientY: 10 })
+    fireEvent.pointerMove(canvas, { pointerId: 1, pointerType: 'mouse', clientX: 60, clientY: 20 })
+    fireEvent.pointerUp(canvas, { pointerId: 1, pointerType: 'mouse', clientX: 60, clientY: 20 })
+
+    expect(screen.getByText('已寫 1 / 3 筆')).toBeInTheDocument()
+    expect(screen.queryByText(/現在只收 Apple Pencil/)).not.toBeInTheDocument()
+  })
+
   it('關掉 penOnly 之後手指寫得出筆畫，復原和清除都有效', () => {
     seed((s) => { s.settings.penOnly = false })
     openWriting()
