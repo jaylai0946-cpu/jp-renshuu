@@ -14,6 +14,7 @@ interface Props {
   onAnswer: (choice: string) => void
   onWrite: (verdict: Verdict) => void
   onNext: () => void
+  onSkip: () => void
   onQuit: () => void
   onSay: () => void
 }
@@ -25,10 +26,18 @@ const ASK: Record<string, string> = {
   zh2jp: '日文怎麼說？',
 }
 
-export function Round({ round, state, onLearn, onAnswer, onWrite, onNext, onQuit, onSay }: Props) {
+export function Round({ round, state, onLearn, onAnswer, onWrite, onNext, onSkip, onQuit, onSay }: Props) {
   const entry = round.queue[round.idx]
   const item = ITEMS[entry.id]
   const pct = (round.idx / round.queue.length) * 100
+
+  const skip = round.answered ? null : (
+    <p className="center">
+      <button type="button" className="skip" onClick={onSkip}>
+        跳過這題
+      </button>
+    </p>
+  )
 
   const top = (
     <div className="rtop">
@@ -112,6 +121,7 @@ export function Round({ round, state, onLearn, onAnswer, onWrite, onNext, onQuit
           penOnly={state.settings.penOnly}
           onJudged={onWrite}
         />
+        {skip}
         {round.answered ? (
           <>
             <div className="feedback-spacer" />
@@ -215,6 +225,7 @@ export function Round({ round, state, onLearn, onAnswer, onWrite, onNext, onQuit
           )
         })}
       </div>
+      {skip}
 
       {round.answered ? (
         <>

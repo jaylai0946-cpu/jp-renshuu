@@ -583,6 +583,40 @@ input:focus-visible {
   height: 190px;
 }
 
+/* 跳過這題：刻意做得不顯眼，免得變成預設動作 */
+.skip {
+  border: none;
+  background: none;
+  color: var(--ink2);
+  font-size: 0.9rem;
+  padding: 8px 14px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/*
+ * 用滑鼠的電腦：螢幕高，固定在底部的結果列離選項太遠，滑鼠要拖一大段。
+ * 改成接在題目下面。iPad 和手機是觸控（pointer: coarse），維持固定在底部讓拇指按得到
+ */
+@media (hover: hover) and (pointer: fine) {
+  .feedback {
+    position: static;
+    margin-top: 18px;
+    border: 2px solid var(--line);
+    border-radius: 14px;
+    padding: 16px 18px;
+  }
+  .feedback.good {
+    border-color: var(--ok);
+  }
+  .feedback.bad {
+    border-color: var(--bad);
+  }
+  .feedback-spacer {
+    display: none;
+  }
+}
+
 .intro {
   text-align: center;
 }

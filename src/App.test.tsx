@@ -238,6 +238,75 @@ describe('App', () => {
     expect(screen.getByText('1 / 1')).toBeInTheDocument()
   })
 
+  describe('跳過這題', () => {
+    beforeEach(() => {
+      seed((s) => {
+        s.settings.newPerDay = 0
+        s.settings.writePerDay = 0
+        s.items['h:あ'] = { b: 3, due: '2020-01-01', seen: 3, wrong: 0 }
+        s.items['h:い'] = { b: 3, due: '2020-01-01', seen: 3, wrong: 0 }
+      })
+    })
+
+    it('跳過不記對錯、不補考，進度原封不動', () => {
+      render(<App />)
+      fireEvent.click(screen.getByRole('button', { name: '開始今日練習' }))
+      const before = localStorage.getItem(STORAGE_KEY)
+
+      fireEvent.click(screen.getByRole('button', { name: '跳過這題' }))
+      fireEvent.click(screen.getByRole('button', { name: '跳過這題' }))
+
+      // 兩題都跳過就直接結算，沒有「再一次」
+      expect(screen.queryByText('再一次')).not.toBeInTheDocument()
+      expect(screen.getByText('0 / 0')).toBeInTheDocument()
+      expect(localStorage.getItem(STORAGE_KEY)).toBe(before)
+    })
+
+    it('跳過一題、答對一題，結算只算答過的那題', () => {
+      render(<App />)
+      fireEvent.click(screen.getByRole('button', { name: '開始今日練習' }))
+      fireEvent.click(screen.getByRole('button', { name: '跳過這題' }))
+      const right = screen.getByTestId('haptic-hit').parentElement!.querySelector('button')!
+      fireEvent.click(right)
+      fireEvent.click(screen.getByRole('button', { name: '繼續' }))
+
+      expect(screen.getByText('1 / 1')).toBeInTheDocument()
+    })
+
+    it('答完之後就沒有跳過鍵了', () => {
+      render(<App />)
+      fireEvent.click(screen.getByRole('button', { name: '開始今日練習' }))
+      fireEvent.click(screen.getByTestId('haptic-hit').parentElement!.querySelector('button')!)
+      expect(screen.queryByRole('button', { name: '跳過這題' })).not.toBeInTheDocument()
+    })
+
+    it('介紹卡沒有跳過鍵', () => {
+      localStorage.removeItem(STORAGE_KEY)
+      render(<App />)
+      fireEvent.click(screen.getByRole('button', { name: '開始今日練習' }))
+      expect(screen.getByText('新しい字')).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: '跳過這題' })).not.toBeInTheDocument()
+    })
+
+    it('默寫題也能跳過（沒帶筆的時候）', () => {
+      seed((s) => {
+        s.settings.newPerDay = 0
+        s.settings.writePerDay = 1
+        for (const it of UNIT_BY_ID['h1'].items) {
+          s.items[it.id] = { b: 3, due: '2030-01-01', seen: 3, wrong: 0 }
+        }
+      })
+      render(<App />)
+      fireEvent.click(screen.getByRole('button', { name: '開始今日練習' }))
+      expect(screen.getByText('憑記憶寫出來')).toBeInTheDocument()
+      const before = localStorage.getItem(STORAGE_KEY)
+
+      fireEvent.click(screen.getByRole('button', { name: '跳過這題' }))
+      expect(screen.getByText('0 / 0')).toBeInTheDocument()
+      expect(localStorage.getItem(STORAGE_KEY)).toBe(before)
+    })
+  })
+
   it('「我已經會了」把整個單元標成盒子 3', () => {
     render(<App />)
     fireEvent.click(screen.getByRole('button', { name: /單元/ }))

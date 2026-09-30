@@ -183,6 +183,15 @@ export function useRound(state: AppState, setState: (fn: (s: AppState) => AppSta
     if (round) advance(round, state)
   }, [advance, round, state])
 
+  /**
+   * 跳過這題：不記對錯、不補考，直接往下。
+   * 進度不動，所以這個字還是到期狀態，下一回合會再出現
+   */
+  const skip = useCallback(() => {
+    if (!round || round.answered || round.intro) return
+    advance(round, state)
+  }, [advance, round, state])
+
   const quit = useCallback(() => {
     if (!round) return
     const answered = Object.keys(round.first).length > 0
@@ -196,5 +205,5 @@ export function useRound(state: AppState, setState: (fn: (s: AppState) => AppSta
 
   const clearSummary = useCallback(() => setSummary(null), [])
 
-  return { round, summary, start, learn, answer, write, next, quit, replay, clearSummary }
+  return { round, summary, start, learn, answer, write, next, skip, quit, replay, clearSummary }
 }

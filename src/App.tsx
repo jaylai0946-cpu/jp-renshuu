@@ -162,6 +162,7 @@ export default function App() {
           onAnswer={round.answer}
           onWrite={round.write}
           onNext={round.next}
+          onSkip={round.skip}
           onQuit={round.quit}
           onSay={round.replay}
         />
