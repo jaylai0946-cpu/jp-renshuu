@@ -2434,6 +2434,50 @@ select {
   }
 }
 
+/* 平板橫拿（iPad mini 1133×744、iPad 1180×820、Android 1280×800）：
+   側欄版面但畫面矮，收緊上下留白，書寫卡才不用捲動 */
+@media (min-width: 1024px) and (max-height: 860px) {
+  .main {
+    padding-top: 22px;
+    padding-bottom: 28px;
+    gap: 18px;
+  }
+  .phead h1 {
+    font-size: 28px;
+  }
+  .side {
+    padding: 20px 18px;
+    gap: 20px;
+  }
+  .wcard {
+    padding: 14px 24px 16px;
+    gap: 10px;
+  }
+  .whead-mid .ch .ro.prompt-ro {
+    font-size: 38px;
+  }
+  /* 右欄（字組、選字表）比書寫卡高的話，整列會被撐高到要捲動 */
+  .wside {
+    gap: 12px;
+  }
+  .wside .chips {
+    gap: 6px;
+  }
+  .wside .chip {
+    min-height: 36px;
+  }
+  .kanagrid {
+    gap: 6px;
+  }
+  .wnote {
+    display: none;
+  }
+  .focus {
+    padding-top: 16px;
+    gap: 20px;
+  }
+}
+
 /* 橫拿的 iPad 畫面矮，把垂直的間距收緊，整頁才塞得下 */
 @media (orientation: landscape) and (max-height: 900px) and (max-width: 1023px) {
   .shell,

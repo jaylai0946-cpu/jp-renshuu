@@ -19,29 +19,43 @@ const MODES: { id: WriteMode; label: string; hint: string }[] = [
 /** 只有假名單元能練手寫。第一版不練漢字 */
 const KANA_UNITS = UNITS.filter((u) => u.kind === 'kana')
 
-/**
- * 手機版格子以外的東西（分頁、chips、字頭、按鈕、底部導覽）大概佔掉的高度。
- *
- * 640 是量出來的：iPad 橫向（1112×834、1024×768）在這個值下，
- * 「寫好了，下一個」不用捲動就按得到，而且格子還能留到 194px。
- * 再往上加只會把格子壓到下限 150，按鈕的位置不會更好。
+/*
+ * 格子大小 = 「畫面高度扣掉格子以外的東西」和「卡片寬度」取小的。
+ * 下面的 CHROME 都是在各尺寸平板上量出來的：格子以外的頁首、膠囊、字頭、
+ * 工具列、上一個／下一個、底部導覽加起來的高度，讓「寫好了，下一個」
+ * 和整張書寫卡不用捲動就看得到。
  */
-const CHROME_HEIGHT = 640
 const MIN_PAD = 150
-const MAX_PAD = 290
-/** 平板直拿（768–1023）版面寬 560，格子可以大一點 */
-const MAX_PAD_TABLET = 380
-/** 電腦版：側欄 248、左右 padding 96，書寫卡佔 12 欄的 7 欄 */
+
+/** 單欄版面（<1024：手機、平板直拿）。格子以外大約 640 */
+const CHROME_HEIGHT = 640
+/** 手機寬度不夠，格子再大也只是把下面的按鈕擠掉 */
+const MAX_PAD_PHONE = 290
+/** 平板直拿（iPad mini 744、iPad 820/834、Android 800）高度夠，可以寫大一點 */
+const MAX_PAD_TABLET = 480
+/** 768–1023 版面置中最寬 600；扣掉外距 40、卡片內距和框 44 */
+const TABLET_COLUMN = 600
+const CARD_INSET = 84
+
+/** 側欄版面（≥1024：平板橫拿、電腦）。頁首、字頭、工具列加上下留白 */
+const DESK_CHROME_HEIGHT = 400
+/** 高度 ≤860 時 CSS 會收緊留白（見 index.css），格子以外只剩這麼多 */
+const DESK_CHROME_HEIGHT_SHORT = 365
+const SHORT_SCREEN = 860
 const DESK_MAX_PAD = 460
-const DESK_CHROME_HEIGHT = 380
 
 function padSizeFor(width: number, height: number): number {
   if (width >= 1024) {
+    // 側欄 248、左右 padding 96，書寫卡佔 12 欄的 7 欄
     const cardWidth = ((Math.min(width, 1200 + 248) - 248 - 96) * 7) / 12 - 60
-    return Math.round(Math.max(MIN_PAD, Math.min(DESK_MAX_PAD, height - DESK_CHROME_HEIGHT, cardWidth)))
+    const chrome = height <= SHORT_SCREEN ? DESK_CHROME_HEIGHT_SHORT : DESK_CHROME_HEIGHT
+    return Math.round(Math.max(MIN_PAD, Math.min(DESK_MAX_PAD, height - chrome, cardWidth)))
   }
-  const max = width >= 768 ? MAX_PAD_TABLET : MAX_PAD
-  return Math.max(MIN_PAD, Math.min(max, height - CHROME_HEIGHT, width - 60))
+  if (width >= 600) {
+    const column = width >= 768 ? Math.min(width, TABLET_COLUMN) : width
+    return Math.round(Math.max(MIN_PAD, Math.min(MAX_PAD_TABLET, height - CHROME_HEIGHT, column - CARD_INSET)))
+  }
+  return Math.max(MIN_PAD, Math.min(MAX_PAD_PHONE, height - CHROME_HEIGHT, width - 60))
 }
 
 /**
