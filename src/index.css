@@ -1365,15 +1365,20 @@ h3 {
 .unit h2 {
   font-size: 16px;
   font-weight: 900;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
+  line-height: 1.35;
 }
+/* 編號、名稱、「進行中」當成同一行文字排；flex 的話編號會自己掉在一行 */
 .unit h2 .no {
   font-family: var(--num);
   font-size: 13px;
   color: var(--muted);
+  margin-right: 6px;
+}
+.unit h2 .badge {
+  display: inline-block;
+  margin-left: 6px;
+  vertical-align: 2px;
+  white-space: nowrap;
 }
 .sample {
   font-family: var(--jp);
@@ -1395,7 +1400,9 @@ h3 {
 }
 .unit .row > * {
   min-height: 48px;
+  padding: 0 10px;
   font-size: 14px;
+  white-space: nowrap;
 }
 .legend {
   color: var(--green-text);
@@ -2148,8 +2155,9 @@ select {
   }
 
   /* 單元：3 欄 */
+  /* 卡片至少 280 寬，按鈕才排得下一行。iPad 橫拿排 2 欄，寬螢幕排 3 欄 */
   .units {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
     gap: 24px;
   }
 
