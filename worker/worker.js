@@ -12,7 +12,8 @@
  *   PUT    /s/<key>      -> 200 {updatedAt}；要帶 If-Match: <上次看到的 updatedAt>
  *                           不符會回 409 加上雲端目前的內容，交給前端讓使用者選
  *   DELETE /s/<key>      -> 200
- *   POST   /grade/<key>  -> 200 批改結果，或 429（今天用完了）
+ *   POST   /grade/<key>  -> 200 批改結果；429（這組密鑰今天用完了）；
+ *                           503（全站今天的額度用完了，見 GRADE_GLOBAL_DAILY）
  *
  * 部署：
  *   npx wrangler kv namespace create SYNC
@@ -26,6 +27,15 @@ const MAX_BODY_BYTES = 1_000_000 // 1 MB，正常資料連 100 KB 都不到
 
 /** 每組密鑰每天最多批改幾次。API key 在這裡，沒有上限就是把錢包交出去 */
 const GRADE_DAILY_LIMIT = 50
+
+/**
+ * 全部人加起來每天最多批改幾次。
+ *
+ * 只限每組密鑰不夠：任何人都能在登入頁開新帳號，每開一個就多 50 次。
+ * 這個上限讓帳單有天花板——200 次 × 約 US$0.003 ≈ 一天 US$0.6。
+ * 可以用 Worker 環境變數 GRADE_GLOBAL_DAILY 覆蓋，不用改程式。
+ */
+const GRADE_GLOBAL_DAILY = 200
 const MAX_PROMPT_CHARS = 200
 const MAX_ANSWER_CHARS = 500
 
@@ -77,6 +87,11 @@ function gradePrompt(question, answer) {
 }
 
 /** YYYY-MM-DD（UTC）。用來當每日計數的 key */
+function globalDailyLimit(env) {
+  const n = Number(env.GRADE_GLOBAL_DAILY)
+  return Number.isFinite(n) && n >= 0 ? n : GRADE_GLOBAL_DAILY
+}
+
 function utcDay() {
   return new Date().toISOString().slice(0, 10)
 }
@@ -99,7 +114,15 @@ async function handleGrade(request, env, key) {
     return json({ error: '這組密鑰還沒同步過進度。先在 App 裡啟用同步並練一回合' }, 403)
   }
 
-  const counterKey = `grade:${key}:${utcDay()}`
+  const day = utcDay()
+  const globalKey = `grade-all:${day}`
+  const globalLimit = globalDailyLimit(env)
+  const globalUsed = Number((await env.SYNC.get(globalKey)) ?? 0)
+  if (globalUsed >= globalLimit) {
+    return json({ error: '今天全站的批改額度用完了，明天再來' }, 503)
+  }
+
+  const counterKey = `grade:${key}:${day}`
   const used = Number((await env.SYNC.get(counterKey)) ?? 0)
   if (used >= GRADE_DAILY_LIMIT) {
     return json({ error: `今天的批改次數用完了（上限 ${GRADE_DAILY_LIMIT} 次），明天再來` }, 429)
@@ -164,8 +187,13 @@ async function handleGrade(request, env, key) {
   /*
    * 計數用「讀了再寫」，KV 不是強一致，同時打很多次會少算。
    * 這只是防濫用不是計費，少算幾次可以接受；TTL 兩天讓舊的自己消失。
+   * 真正的硬上限是 Anthropic Console 的每月花費上限（見 README）。
    */
-  await env.SYNC.put(counterKey, String(used + 1), { expirationTtl: 60 * 60 * 48 })
+  const ttl = { expirationTtl: 60 * 60 * 48 }
+  await Promise.all([
+    env.SYNC.put(counterKey, String(used + 1), ttl),
+    env.SYNC.put(globalKey, String(globalUsed + 1), ttl),
+  ])
 
   return json({ result, used: used + 1, limit: GRADE_DAILY_LIMIT })
 }

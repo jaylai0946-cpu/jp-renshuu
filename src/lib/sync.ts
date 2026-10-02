@@ -241,8 +241,16 @@ export type PushResult =
   | { status: 'conflict'; remote: RemoteRecord }
   | { status: 'error'; message: string }
 
-export async function push(config: SyncConfig, state: AppState): Promise<PushResult> {
+/** keepalive 的請求本體上限是 64 KB，留一點餘裕 */
+const KEEPALIVE_MAX_BYTES = 60_000
+
+export async function push(
+  config: SyncConfig,
+  state: AppState,
+  options: { keepalive?: boolean } = {},
+): Promise<PushResult> {
   try {
+    const payload = JSON.stringify({ version: state.version, state })
     const res = await fetch(urlFor(config), {
       method: 'PUT',
       headers: {
@@ -250,7 +258,10 @@ export async function push(config: SyncConfig, state: AppState): Promise<PushRes
         // 帶上「我上次看到的版本」。雲端不一樣就代表另一台改過，不要蓋
         ...(config.lastSeen ? { 'If-Match': `"${config.lastSeen}"` } : {}),
       },
-      body: JSON.stringify({ version: state.version, state }),
+      body: payload,
+      // 頁面關掉或切到背景時才送的那一次，要讓瀏覽器在頁面消失後還把它送完。
+      // 超過上限的話 keepalive 會直接失敗，那就退回一般請求碰碰運氣
+      keepalive: options.keepalive === true && new Blob([payload]).size <= KEEPALIVE_MAX_BYTES,
     })
 
     if (res.status === 409) {

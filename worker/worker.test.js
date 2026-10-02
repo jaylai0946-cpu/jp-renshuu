@@ -231,5 +231,73 @@ describe('/grade', () => {
     await worker.fetch(post(`/grade/${KEY}`, { prompt: 'a', answer: 'b' }), e)
     const day = new Date().toISOString().slice(0, 10)
     expect(await e.SYNC.get(`grade:${KEY}:${day}`)).toBeNull()
+    expect(await e.SYNC.get(`grade-all:${day}`)).toBeNull()
+  })
+
+  describe('全站每日上限', () => {
+    const day = () => new Date().toISOString().slice(0, 10)
+
+    /** 多開幾組都同步過的密鑰——模擬有人一直開新帳號 */
+    function envWithKeys(keys, overrides = {}) {
+      const initial = {}
+      for (const k of keys) initial[`state:${k}`] = JSON.stringify({ version: 2, updatedAt: 'x', state: {} })
+      return env({ SYNC: fakeKV(initial), ...overrides })
+    }
+
+    it('每次批改成功都算進全站用量', async () => {
+      vi.stubGlobal('fetch', vi.fn(async () => claudeReply(GOOD)))
+      const e = env()
+      await worker.fetch(post(`/grade/${KEY}`, { prompt: 'a', answer: 'b' }), e)
+      await worker.fetch(post(`/grade/${KEY}`, { prompt: 'a', answer: 'b' }), e)
+      expect(await e.SYNC.get(`grade-all:${day()}`)).toBe('2')
+    })
+
+    it('全站用完回 503，而且不會打到 Anthropic', async () => {
+      const spy = vi.fn(async () => claudeReply(GOOD))
+      vi.stubGlobal('fetch', spy)
+      const e = env()
+      await e.SYNC.put(`grade-all:${day()}`, '200')
+
+      const res = await worker.fetch(post(`/grade/${KEY}`, { prompt: 'a', answer: 'b' }), e)
+      expect(res.status).toBe(503)
+      expect((await res.json()).error).toContain('全站')
+      expect(spy).not.toHaveBeenCalled()
+    })
+
+    it('一直開新帳號也繞不過：全部加起來不超過上限', async () => {
+      const spy = vi.fn(async () => claudeReply(GOOD))
+      vi.stubGlobal('fetch', spy)
+      const keys = Array.from({ length: 10 }, (_, i) => String(i).repeat(32))
+      const e = envWithKeys(keys, { GRADE_GLOBAL_DAILY: '15' })
+
+      const statuses = []
+      for (const k of keys) {
+        for (let n = 0; n < 3; n++) {
+          statuses.push((await worker.fetch(post(`/grade/${k}`, { prompt: 'a', answer: 'b' }), e)).status)
+        }
+      }
+      expect(spy).toHaveBeenCalledTimes(15)
+      expect(statuses.filter((s) => s === 200)).toHaveLength(15)
+      expect(statuses.filter((s) => s === 503)).toHaveLength(15)
+    })
+
+    it('上限可以用環境變數改，0 就是暫停批改', async () => {
+      const spy = vi.fn(async () => claudeReply(GOOD))
+      vi.stubGlobal('fetch', spy)
+      const res = await worker.fetch(
+        post(`/grade/${KEY}`, { prompt: 'a', answer: 'b' }),
+        env({ GRADE_GLOBAL_DAILY: '0' }),
+      )
+      expect(res.status).toBe(503)
+      expect(spy).not.toHaveBeenCalled()
+    })
+
+    it('環境變數亂填就用預設的 200', async () => {
+      vi.stubGlobal('fetch', vi.fn(async () => claudeReply(GOOD)))
+      const e = env({ GRADE_GLOBAL_DAILY: 'abc' })
+      await e.SYNC.put(`grade-all:${day()}`, '199')
+      expect((await worker.fetch(post(`/grade/${KEY}`, { prompt: 'a', answer: 'b' }), e)).status).toBe(200)
+      expect((await worker.fetch(post(`/grade/${KEY}`, { prompt: 'a', answer: 'b' }), e)).status).toBe(503)
+    })
   })
 })

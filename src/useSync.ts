@@ -19,8 +19,18 @@ export type SyncStatus =
   /** 剛把兩台的進度合起來 */
   | { kind: 'merged'; at: string }
 
-/** 改完之後等一下再推，免得每打一個字就打一次伺服器。 */
+/** 改完之後至少等這麼久再推，連續幾個改動併成一次 */
 const PUSH_DEBOUNCE_MS = 1500
+
+/**
+ * 兩次推送至少隔這麼久。
+ *
+ * 原本是改完 1.5 秒就推，練習時幾乎每答一題就寫一次雲端。Cloudflare KV
+ * 免費方案一天只能寫 1,000 次，十幾個人同一天練習就會撞到上限、同步失敗。
+ * 改成最多 20 秒推一次；切到背景、關掉頁面、一回合結束時會立刻推（flush），
+ * 所以換到另一台裝置時看到的還是最新的。
+ */
+const PUSH_INTERVAL_MS = 20_000
 
 export function useSync(state: AppState, applyRemote: (next: AppState) => void) {
   const [config, setConfigState] = useState<SyncConfig | null>(loadSyncConfig)
@@ -46,6 +56,8 @@ export function useSync(state: AppState, applyRemote: (next: AppState) => void) 
   // 剛從雲端套用進來的那份，不能又被當成本機改動推回去，否則兩台會互相彈球
   const appliedRef = useRef<AppState | null>(null)
   const timerRef = useRef<number | undefined>(undefined)
+  /** 上一次開始推送的時間。用來算下一次最早什麼時候能推 */
+  const lastPushRef = useRef(0)
 
   /** 元件已經卸載就不要再寫。非同步的同步鏈可能在卸載之後才回來 */
   const mountedRef = useRef(true)
@@ -72,12 +84,15 @@ export function useSync(state: AppState, applyRemote: (next: AppState) => void) 
     return configRef.current === config
   }
 
-  const doPush = useCallback(async () => {
+  const doPush = useCallback(async (options: { keepalive?: boolean } = {}) => {
+    window.clearTimeout(timerRef.current)
+    timerRef.current = undefined
     const current = configRef.current
     if (!current) return
+    lastPushRef.current = Date.now()
     setStatus({ kind: 'busy' })
 
-    const result = await push(current, stateRef.current)
+    const result = await push(current, stateRef.current, options)
     if (!stillCurrent(current)) return
 
     if (result.status === 'ok') {
@@ -181,7 +196,7 @@ export function useSync(state: AppState, applyRemote: (next: AppState) => void) 
     // 只在設定變動時重跑
   }, [config?.endpoint, config?.key]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 本機改動 -> 標記 dirty -> 延遲推送
+  // 本機改動 -> 標記 dirty -> 排一次推送（已經排了就不重排，推的時候會帶最新的 state）
   useEffect(() => {
     const current = configRef.current
     if (!current || !settledRef.current) return
@@ -191,12 +206,44 @@ export function useSync(state: AppState, applyRemote: (next: AppState) => void) 
     }
 
     commitConfig({ ...current, dirty: true })
-    window.clearTimeout(timerRef.current)
-    timerRef.current = window.setTimeout(() => void doPush(), PUSH_DEBOUNCE_MS)
-
-    return () => window.clearTimeout(timerRef.current)
+    if (timerRef.current !== undefined) return
+    const wait = Math.max(PUSH_DEBOUNCE_MS, lastPushRef.current + PUSH_INTERVAL_MS - Date.now())
+    timerRef.current = window.setTimeout(() => void doPush(), wait)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state])
+
+  // 卸載時把排好的推送取消，免得登出後還推上去
+  useEffect(() => () => window.clearTimeout(timerRef.current), [])
+
+  /**
+   * 有還沒推上去的改動就馬上推。
+   * 一回合結束、切到背景、關掉頁面時呼叫——這些時候使用者可能正要換另一台裝置。
+   */
+  const flush = useCallback(
+    (options: { keepalive?: boolean } = {}) => {
+      const current = configRef.current
+      if (!current || !settledRef.current) return
+      if (timerRef.current === undefined && !current.dirty) return
+      void doPush(options)
+    },
+    [doPush],
+  )
+
+  // 切到背景或關掉頁面：立刻推。keepalive 讓頁面消失後請求還能送完
+  useEffect(() => {
+    function onHide() {
+      if (document.visibilityState === 'hidden') flush({ keepalive: true })
+    }
+    function onPageHide() {
+      flush({ keepalive: true })
+    }
+    document.addEventListener('visibilitychange', onHide)
+    window.addEventListener('pagehide', onPageHide)
+    return () => {
+      document.removeEventListener('visibilitychange', onHide)
+      window.removeEventListener('pagehide', onPageHide)
+    }
+  }, [flush])
 
   // 切回這個分頁時再對一次，這樣另一台的改動才看得到
   useEffect(() => {
@@ -227,5 +274,5 @@ export function useSync(state: AppState, applyRemote: (next: AppState) => void) 
     [commitConfig],
   )
 
-  return { config, status, enable, disable, syncNow }
+  return { config, status, enable, disable, syncNow, flush }
 }

@@ -99,6 +99,13 @@ export default function App() {
 
   const round = useRound(state, setState)
 
+  // 一回合練完就把進度推上去，不用等同步的 20 秒間隔——可能正要換另一台裝置
+  const flushSync = sync.flush
+  const finished = round.summary !== null
+  useEffect(() => {
+    if (finished) flushSync()
+  }, [finished, flushSync])
+
   /**
    * 登出：同步設定和本機進度一起清掉。
    *
