@@ -12,6 +12,13 @@ export interface Thresholds {
   shapeMax: number
   /** 平均距離在這之內算寫得好 */
   shapeGood: number
+  /**
+   * 相似字：寫出來比範本更像另一個同筆數的假名，而且近了這麼多，就判 ✕。
+   * ね 和 れ 的範本只差 10.7，比 shapeMax 還小——不比對別的字的話，寫成 れ 也會過。
+   */
+  confuseStrong: number
+  /** 近了這麼多但還不到 confuseStrong：本來 ◎ 的降成 △ 提醒一下 */
+  confuseWeak: number
 }
 
 /** Apple Pencil：有筆尖精度，可以稍微嚴一點 */
@@ -19,6 +26,10 @@ export const PEN: Thresholds = {
   startMax: 22,
   shapeMax: 16,
   shapeGood: 9,
+  // 用範本加位移、縮放、抖動模擬：故意寫成相似字能抓到 87–98%，
+  // 寫對但很潦草的被誤判成 ✕ 在 2220 次裡最多 5 次（scripts 見 score.test.ts）
+  confuseStrong: 3,
+  confuseWeak: 1.5,
 }
 
 /** 手指或滑鼠：接觸面積大、控制差，門檻放寬 */
@@ -26,6 +37,9 @@ export const FINGER: Thresholds = {
   startMax: 30,
   shapeMax: 23,
   shapeGood: 14,
+  // 手指抖得多，要差更多才敢說寫成別的字
+  confuseStrong: 4,
+  confuseWeak: 2,
 }
 
 export function thresholdsFor(penOnly: boolean): Thresholds {

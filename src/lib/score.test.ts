@@ -185,3 +185,60 @@ describe('邊界情況', () => {
     expect(score.strokes).toHaveLength(3)
   })
 })
+
+describe('相似字', () => {
+  it('題目是 ね 卻寫成 れ：判 ✕，說像 れ', () => {
+    const score = scoreCharacter('ね', trace('れ'), SIZE, PEN)
+    expect(score.verdict).toBe('bad')
+    expect(score.confusedWith).toBe('れ')
+    expect(score.message).toContain('「れ」')
+    expect(score.problemStrokes.length).toBeGreaterThan(0)
+  })
+
+  it('れ、わ、ね 三個互相寫錯都抓得到', () => {
+    for (const [target, written] of [
+      ['れ', 'わ'],
+      ['わ', 'れ'],
+      ['れ', 'ね'],
+      ['わ', 'ね'],
+      ['ぬ', 'め'],
+      ['め', 'ぬ'],
+      ['シ', 'ツ'],
+      ['ツ', 'シ'],
+      ['ソ', 'ン'],
+      ['ン', 'ソ'],
+    ]) {
+      const score = scoreCharacter(target, trace(written), SIZE, PEN)
+      expect(score.verdict, `${target} 寫成 ${written}`).not.toBe('ok')
+    }
+  })
+
+  it('稍微歪掉但寫對的字不會被說成別的字', () => {
+    const rand = seeded(42)
+    const wrongly: string[] = []
+    for (const ch of Object.keys(STROKE_PATHS)) {
+      for (let r = 0; r < 5; r++) {
+        const dx = rand() * 8
+        const dy = rand() * 8
+        const score = scoreCharacter(
+          ch,
+          trace(ch, (p, i) => ({ x: p.x + dx + Math.sin(i / 3) * 1.5, y: p.y + dy + Math.cos(i / 3) * 1.5 })),
+          SIZE,
+          PEN,
+        )
+        if (score.confusedWith && score.verdict === 'bad') wrongly.push(`${ch}→${score.confusedWith}`)
+      }
+    }
+    expect(wrongly).toEqual([])
+  })
+
+  it('小字不跟自己的大字比（ゃ／や 是同一個字）', () => {
+    const score = scoreCharacter('ゃ', trace('や'), SIZE, PEN)
+    expect(score.confusedWith).not.toBe('や')
+  })
+
+  it('平假名不跟片假名比（へ／ヘ 長得一樣）', () => {
+    const score = scoreCharacter('へ', trace('ヘ'), SIZE, PEN)
+    expect(score.confusedWith).toBeUndefined()
+  })
+})

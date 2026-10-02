@@ -1,5 +1,5 @@
 import { distance, resample, type InkPoint, type Point } from './path'
-import { SAMPLES_PER_STROKE, templateFor, toKanjiVGSpace } from './strokes'
+import { SAMPLES_PER_STROKE, STROKE_PATHS, templateFor, toKanjiVGSpace } from './strokes'
 import { thresholdsFor, type Thresholds } from './thresholds'
 
 export type Verdict = 'ok' | 'shape' | 'bad'
@@ -24,6 +24,8 @@ export interface Score {
   message: string
   /** 第幾筆有問題（1 起算）。筆數就錯的話是空的 */
   problemStrokes: number[]
+  /** 寫得比較像哪個相似字（ね 寫成 れ 之類） */
+  confusedWith?: string
 }
 
 /**
@@ -65,9 +67,8 @@ export function scoreCharacter(
     }
   }
 
-  const strokes = userStrokes.map((raw, i) =>
-    scoreStroke(resample(toKanjiVGSpace(raw, canvasSize), SAMPLES_PER_STROKE), template[i], thresholds),
-  )
+  const normalized = userStrokes.map((raw) => resample(toKanjiVGSpace(raw, canvasSize), SAMPLES_PER_STROKE))
+  const strokes = normalized.map((user, i) => scoreStroke(user, template[i], thresholds))
 
   const problemStrokes = strokes
     .map((s, i) => (s.verdict === 'ok' ? 0 : i + 1))
@@ -88,6 +89,26 @@ export function scoreCharacter(
     }
   }
 
+  // 筆順都對了，再看是不是其實寫成了另一個相似的字
+  const confused = closestConfusable(ch, normalized, strokes)
+  if (confused && confused.margin > thresholds.confuseStrong) {
+    // 跟那個字比較像的筆標紅，畫布上看得出差在哪
+    const marked = strokes.map((s, i) =>
+      confused.perStroke[i] + 1 < s.shapeDistance ? { ...s, verdict: 'bad' as const } : s,
+    )
+    const flagged = marked.map((s, i) => (s.verdict === 'bad' ? i + 1 : 0)).filter((n) => n > 0)
+    return {
+      verdict: 'bad',
+      strokes: flagged.length ? marked : strokes.map((s) => ({ ...s, verdict: 'bad' as const })),
+      expected,
+      actual,
+      message: `這樣寫比較像「${confused.ch}」，不是「${ch}」`,
+      problemStrokes: flagged.length ? flagged : strokes.map((_, i) => i + 1),
+      confusedWith: confused.ch,
+    }
+  }
+  const lookalike = confused && confused.margin > thresholds.confuseWeak ? confused.ch : undefined
+
   if (problemStrokes.length) {
     return {
       verdict: 'shape',
@@ -99,7 +120,71 @@ export function scoreCharacter(
     }
   }
 
+  if (lookalike) {
+    return {
+      verdict: 'shape',
+      strokes,
+      expected,
+      actual,
+      message: `有點像「${lookalike}」，跟「${ch}」的範本對照一下`,
+      problemStrokes,
+      confusedWith: lookalike,
+    }
+  }
+
   return { verdict: 'ok', strokes, expected, actual, message: '筆順和字形都對', problemStrokes }
+}
+
+// ---- 相似字 ----
+
+const SMALL_TO_LARGE: Record<string, string> = {
+  ぁ: 'あ', ぃ: 'い', ぅ: 'う', ぇ: 'え', ぉ: 'お', っ: 'つ', ゃ: 'や', ゅ: 'ゆ', ょ: 'よ', ゎ: 'わ',
+  ァ: 'ア', ィ: 'イ', ゥ: 'ウ', ェ: 'エ', ォ: 'オ', ッ: 'ツ', ャ: 'ヤ', ュ: 'ユ', ョ: 'ヨ', ヮ: 'ワ', ヵ: 'カ', ヶ: 'ケ',
+}
+const base = (ch: string) => SMALL_TO_LARGE[ch] ?? ch
+const isHiragana = (ch: string) => /[\u3041-\u3096]/.test(ch)
+
+const candidateCache = new Map<string, string[]>()
+
+/**
+ * 可能被寫混的字：同一種假名（平假名不跟片假名比，へ／ヘ 本來就長一樣）、
+ * 同樣筆數（筆數不同早就被「筆畫數不對」擋掉了）、不是自己的大小寫（ゃ／や）。
+ */
+function confusablesOf(ch: string): string[] {
+  const cached = candidateCache.get(ch)
+  if (cached) return cached
+  const n = templateFor(ch).length
+  const list = Object.keys(STROKE_PATHS).filter(
+    (c) => base(c) !== base(ch) && isHiragana(c) === isHiragana(ch) && templateFor(c).length === n,
+  )
+  candidateCache.set(ch, list)
+  return list
+}
+
+function meanDistance(a: Point[], b: Point[]): number {
+  let sum = 0
+  for (let i = 0; i < b.length; i++) sum += distance(a[i], b[i])
+  return sum / b.length
+}
+
+/**
+ * 寫出來的東西最像哪個相似字，比目標近了多少（KanjiVG 座標的平均距離）。
+ * 沒有比目標更像的就回 null。
+ */
+function closestConfusable(
+  ch: string,
+  user: Point[][],
+  own: StrokeScore[],
+): { ch: string; margin: number; perStroke: number[] } | null {
+  const target = own.reduce((n, s) => n + s.shapeDistance, 0) / own.length
+  let best: { ch: string; margin: number; perStroke: number[] } | null = null
+  for (const c of confusablesOf(ch)) {
+    const perStroke = templateFor(c).map((t, i) => meanDistance(user[i], t))
+    const d = perStroke.reduce((n, x) => n + x, 0) / perStroke.length
+    const margin = target - d
+    if (margin > 0 && (!best || margin > best.margin)) best = { ch: c, margin, perStroke }
+  }
+  return best
 }
 
 function scoreStroke(user: Point[], template: Point[], t: Thresholds): StrokeScore {
@@ -171,5 +256,5 @@ export function scoreWith(
 export const VERDICT_LABEL: Record<Verdict, { mark: string; text: string }> = {
   ok: { mark: '◎', text: '正確' },
   shape: { mark: '△', text: '形狀偏了' },
-  bad: { mark: '✕', text: '筆順或筆畫數錯' },
+  bad: { mark: '✕', text: '寫錯了' },
 }

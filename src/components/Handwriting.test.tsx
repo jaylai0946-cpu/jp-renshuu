@@ -151,7 +151,7 @@ describe('手寫分頁', () => {
     fireEvent.click(screen.getByRole('button', { name: '默寫' }))
     scribble(3)
 
-    expect(screen.getByText('筆順或筆畫數錯')).toBeInTheDocument()
+    expect(screen.getByText('寫錯了')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '下一個' })).toBeNull()
     // 默寫寫錯可以先看答案
     expect(screen.getByRole('button', { name: '看答案' })).toBeInTheDocument()
