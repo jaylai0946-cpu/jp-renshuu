@@ -21,6 +21,18 @@ export function watchForUpdates(): void {
     reloading = true
     window.location.reload()
   })
+
+  // 瀏覽器只在冷啟動時檢查新版。iPad 上加到主畫面的 App 常常一直掛在背景，
+  // 好幾天都拿不到新版——每次切回 App 時問一次（最多一分鐘一次）
+  let lastCheck = Date.now()
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible' || Date.now() - lastCheck < 60_000) return
+    lastCheck = Date.now()
+    void navigator.serviceWorker
+      .getRegistration()
+      .then((r) => r?.update())
+      .catch(() => {})
+  })
 }
 
 export type UpdateCheck =

@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { InkPoint } from '../lib/path'
 import {
   VERDICT_LABEL,
@@ -151,6 +151,20 @@ export function WritingPad({
   const scores = cells.map((c) => c.score).filter((s): s is Score => s !== null)
   const overall = scores.length === chars.length ? combineVerdicts(scores.map((s) => s.verdict)) : null
 
+  // 結果列是寫完才長出來的。版面再怎麼估也可能差一點（字型、網址列），
+  // 萬一它落在畫面外，捲過去讓「下一個／重來」看得到
+  const resultRef = useRef<HTMLDivElement>(null)
+  const judged = overall !== null
+  useEffect(() => {
+    const el = resultRef.current
+    if (!judged || !onNext || !el?.scrollIntoView) return
+    // 'nearest' 碰上 scroll-margin 時 Chrome 不會捲，自己判斷要不要捲再用 'end'
+    const margin = parseFloat(getComputedStyle(el).scrollMarginBottom) || 0
+    if (el.getBoundingClientRect().bottom + margin > window.innerHeight) {
+      el.scrollIntoView({ block: 'end', behavior: 'smooth' })
+    }
+  }, [judged, onNext])
+
   return (
     <>
       <div className="padwrap">
@@ -168,12 +182,19 @@ export function WritingPad({
         ))}
       </div>
 
-      <p className="pad-foot">
-        已寫 {written} / {expected} 筆
-      </p>
+      {/* 寫完之後結果列會說明一切，這行收起來讓出高度 */}
+      {overall && onNext ? null : (
+        <p className="pad-foot">
+          已寫 {written} / {expected} 筆
+        </p>
+      )}
 
       {overall ? (
-        <div className={`wresult ${overall === 'bad' ? 'bad' : overall === 'ok' ? 'good' : ''}`} role="status">
+        <div
+          ref={resultRef}
+          className={`wresult ${overall === 'bad' ? 'bad' : overall === 'ok' ? 'good' : ''}`}
+          role="status"
+        >
           <span className="mark" aria-hidden="true">
             {VERDICT_LABEL[overall].mark}
           </span>

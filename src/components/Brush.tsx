@@ -214,6 +214,9 @@ export function Brush({
     <canvas
       ref={canvasRef}
       className="pad"
+      // CSS 尺寸直接寫在元素上：上層（手寫頁的 useFitPad）在 layout effect 量版面，
+      // 等不到這裡的 useEffect，沒寫的話量到的是 canvas 預設的 300×150
+      style={{ width: size, height: size }}
       onPointerDown={handleDown}
       onPointerMove={handleMove}
       onPointerUp={(e) => finish(e, true)}

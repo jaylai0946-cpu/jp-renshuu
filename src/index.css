@@ -1566,6 +1566,15 @@ h3 {
 .wresult b {
   font-size: 16px;
 }
+/* 捲到結果列時別停在底部分頁列後面 */
+.wresult {
+  scroll-margin-bottom: 104px;
+}
+@media (min-width: 1024px) {
+  .wresult {
+    scroll-margin-bottom: 16px;
+  }
+}
 .wresult-text {
   flex: 1;
   min-width: 140px;

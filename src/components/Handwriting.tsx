@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { UNITS } from '../data/units'
 import type { Verdict } from '../lib/score'
 import { speak } from '../lib/speech'
@@ -78,6 +78,60 @@ function usePadSize(): number {
   return size
 }
 
+/** 寫完才出現的結果列比工具列高，先把差距留起來，免得寫完那一刻按鈕被推出畫面 */
+const RESULT_ROW_EXTRA = 40
+/** 書寫卡底下至少留這麼多空 */
+const BOTTOM_GAP = 12
+
+/**
+ * 公式算出來的格子大小再用實際版面校正一次。
+ *
+ * 公式裡的「格子以外佔多高」是在模擬器上量的，真機上字型、狀態列、
+ * Safari 網址列都會讓它差一點——iPad Pro 11 就差到書寫卡底部被切掉。
+ * 這裡畫完之後量書寫卡內容的底部，超出畫面多少就把格子縮多少；
+ * 有多的空間再放回去。只在換字、換模式、轉向、字型載入完時量，
+ * 寫字途中和寫完都不動，免得已經寫的筆畫跟格子對不上。
+ */
+function useFitPad(base: number, cardRef: RefObject<HTMLElement | null>, key: string): number {
+  const [shrink, setShrink] = useState(0)
+  const [fontsReady, setFontsReady] = useState(0)
+
+  // 換尺寸（轉向、分割畫面）就從頭量
+  const [prevBase, setPrevBase] = useState(base)
+  if (base !== prevBase) {
+    setPrevBase(base)
+    setShrink(0)
+  }
+
+  // 網頁字型晚到會改變字頭和按鈕的高度
+  useEffect(() => {
+    let alive = true
+    document.fonts?.ready.then(() => alive && setFontsReady((n) => n + 1))
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  useLayoutEffect(() => {
+    const card = cardRef.current
+    const last = card?.lastElementChild
+    if (!card || !last) return
+    const style = getComputedStyle(card)
+    const inset = (parseFloat(style.paddingBottom) || 0) + (parseFloat(style.borderBottomWidth) || 0)
+    const bottom = last.getBoundingClientRect().bottom + window.scrollY + inset + RESULT_ROW_EXTRA
+
+    const nav = document.querySelector('.nav')
+    const navHeight = nav && getComputedStyle(nav).position === 'fixed' ? nav.getBoundingClientRect().height : 0
+    const over = Math.round(bottom - (window.innerHeight - navHeight - BOTTOM_GAP))
+    if (!Number.isFinite(over)) return
+
+    if (over > 1) setShrink((s) => Math.min(s + over, Math.max(0, base - MIN_PAD)))
+    else if (over < -8 && shrink > 0) setShrink((s) => Math.max(0, s + over))
+  }, [base, cardRef, key, fontsReady, shrink])
+
+  return Math.max(MIN_PAD, base - shrink)
+}
+
 interface Props {
   state: AppState
   syncText: string
@@ -93,7 +147,7 @@ export function Handwriting({ state, syncText, syncOk, onSetting, onWrite }: Pro
   const [index, setIndex] = useState(0)
   const [blocked, setBlocked] = useState(false)
   const [replay, setReplay] = useState(0)
-  const padSize = usePadSize()
+  const cardRef = useRef<HTMLElement>(null)
 
   const unit = KANA_UNITS.find((u) => u.id === unitId) ?? KANA_UNITS[0]
 
@@ -107,6 +161,7 @@ export function Handwriting({ state, syncText, syncOk, onSetting, onWrite }: Pro
   )
 
   const current = items[Math.min(index, items.length - 1)]
+  const padSize = useFitPad(usePadSize(), cardRef, `${current?.id}|${mode}|${unitId}`)
   if (!current) return <p className="muted">這個單元沒有可以練的字。</p>
 
   const chars = [...current.ch]
@@ -155,7 +210,7 @@ export function Handwriting({ state, syncText, syncOk, onSetting, onWrite }: Pro
       </header>
 
       <div className="write-grid">
-        <section className="card wcard" aria-label="書寫區">
+        <section className="card wcard" aria-label="書寫區" ref={cardRef}>
           <div className="whead">
             <button type="button" className="btn btn-round" onClick={() => go(-1)} aria-label="上一個字">
               <Icon name="left" size={20} />
