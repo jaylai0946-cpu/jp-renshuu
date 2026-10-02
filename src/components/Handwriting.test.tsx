@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../App'
 import { STORAGE_KEY } from '../constants'
 import { emptyState } from '../lib/storage'
+import { KANJIVG_SIZE, outlineFor } from '../lib/strokes'
 import type { AppState } from '../types'
 
 /**
@@ -85,28 +86,88 @@ describe('手寫分頁', () => {
     expect(screen.getByRole('button', { name: '練寫 あ' })).toBeInTheDocument()
   })
 
-  it('底部是上一個／下一個一對，發音在書寫卡的工具列', () => {
+  it('沒有固定的上一個／寫好了按鈕，發音在書寫卡的工具列', () => {
     openWriting()
     fireEvent.click(screen.getByRole('button', { name: '描寫' }))
 
-    expect(screen.getByRole('button', { name: '上一個' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '寫好了，下一個' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '上一個' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '寫好了，下一個' })).toBeNull()
+    // 還沒寫完也不會出現下一個／重來
+    expect(screen.queryByRole('button', { name: '下一個' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '重來' })).toBeNull()
 
-    // 發音在書寫卡的工具列，不在底部那一排
     const speak = screen.getByRole('button', { name: /唸一次/ })
     expect(speak.closest('.wcard')).not.toBeNull()
-    expect(speak.closest('.wnav')).toBeNull()
   })
 
-  it('「上一個」會倒回去，第一個字會繞到最後一個', () => {
+  it('字頭的箭頭會倒回去，第一個字會繞到最後一個', () => {
     openWriting()
     expect(screen.getByText(/第 1 \/ 46 個/)).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: '上一個' }))
+    fireEvent.click(screen.getByRole('button', { name: '上一個字' }))
     expect(screen.getByText(/第 46 \/ 46 個/)).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: '寫好了，下一個' }))
+    fireEvent.click(screen.getByRole('button', { name: '下一個字' }))
     expect(screen.getByText(/第 1 \/ 46 個/)).toBeInTheDocument()
+  })
+
+  /** 照 KanjiVG 的筆畫一筆一筆描，畫布在 jsdom 裡位置是 (0,0) */
+  function traceExactly(ch: string) {
+    const canvas = screen.getByLabelText('手寫區') as HTMLCanvasElement
+    const k = parseFloat(canvas.style.width) / KANJIVG_SIZE
+    outlineFor(ch).forEach((stroke, n) => {
+      const id = n + 1
+      const at = (p: { x: number; y: number }) => ({ pointerId: id, pointerType: 'pen', clientX: p.x * k, clientY: p.y * k })
+      fireEvent.pointerDown(canvas, at(stroke[0]))
+      for (const p of stroke.slice(1)) fireEvent.pointerMove(canvas, at(p))
+      fireEvent.pointerUp(canvas, at(stroke[stroke.length - 1]))
+    })
+  }
+
+  /** 三筆都畫成同一條短橫線：筆畫數對，但形狀和筆順都錯 */
+  function scribble(strokes: number) {
+    const canvas = screen.getByLabelText('手寫區')
+    for (let id = 1; id <= strokes; id++) {
+      fireEvent.pointerDown(canvas, { pointerId: id, pointerType: 'pen', clientX: 5, clientY: 5 })
+      fireEvent.pointerMove(canvas, { pointerId: id, pointerType: 'pen', clientX: 15, clientY: 6 })
+      fireEvent.pointerUp(canvas, { pointerId: id, pointerType: 'pen', clientX: 15, clientY: 6 })
+    }
+  }
+
+  it('寫對了出現「下一個」，按了換下一個字', () => {
+    openWriting()
+    fireEvent.click(screen.getByRole('button', { name: '描寫' }))
+    traceExactly('あ')
+
+    expect(screen.getByText('正確')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '重來' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '下一個' }))
+    expect(screen.getByText(/第 2 \/ 46 個/)).toBeInTheDocument()
+    expect(screen.getByText('已寫 0 / 2 筆')).toBeInTheDocument()
+  })
+
+  it('寫錯了出現「重來」，按了清掉重寫，字不變', () => {
+    openWriting()
+    fireEvent.click(screen.getByRole('button', { name: '默寫' }))
+    scribble(3)
+
+    expect(screen.getByText('筆順或筆畫數錯')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '下一個' })).toBeNull()
+    // 默寫寫錯可以先看答案
+    expect(screen.getByRole('button', { name: '看答案' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '重來' }))
+
+    expect(screen.getByText(/第 1 \/ 46 個/)).toBeInTheDocument()
+    expect(screen.getByText('已寫 0 / 3 筆')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '重來' })).toBeNull()
+  })
+
+  it('寫完後工具列收起來，結果列取代它', () => {
+    openWriting()
+    fireEvent.click(screen.getByRole('button', { name: '描寫' }))
+    scribble(3)
+    expect(screen.queryByRole('button', { name: '上一筆復原' })).toBeNull()
+    expect(screen.getByRole('status')).toHaveClass('wresult')
   })
 
   it('換字換單元都動得了，筆畫數跟著變', () => {
@@ -241,7 +302,7 @@ describe('手寫分頁', () => {
     fireEvent.pointerUp(canvas, { pointerId: 1, pointerType: 'touch', clientX: 10, clientY: 10 })
     expect(screen.getByText('已寫 1 / 3 筆')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: '寫好了，下一個' }))
+    fireEvent.click(screen.getByRole('button', { name: '下一個字' }))
     expect(screen.getByText('已寫 0 / 2 筆')).toBeInTheDocument()
   })
 
@@ -289,7 +350,7 @@ describe('手寫分頁', () => {
     fireEvent.click(screen.getByRole('button', { name: '默寫' }))
     fireEvent.click(screen.getByRole('button', { name: '看答案' }))
 
-    fireEvent.click(screen.getByRole('button', { name: '寫好了，下一個' }))
+    fireEvent.click(screen.getByRole('button', { name: '下一個字' }))
     expect(screen.getByRole('button', { name: '看答案' })).toBeInTheDocument()
   })
 

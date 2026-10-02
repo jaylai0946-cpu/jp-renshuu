@@ -40,7 +40,7 @@ const CARD_INSET = 84
 /** 側欄版面（≥1024：平板橫拿、電腦）。頁首、字頭、工具列加上下留白 */
 const DESK_CHROME_HEIGHT = 400
 /** 高度 ≤860 時 CSS 會收緊留白（見 index.css），格子以外只剩這麼多 */
-const DESK_CHROME_HEIGHT_SHORT = 365
+const DESK_CHROME_HEIGHT_SHORT = 380
 const SHORT_SCREEN = 860
 const DESK_MAX_PAD = 460
 
@@ -233,6 +233,7 @@ export function Handwriting({ state, syncText, syncOk, onSetting, onWrite }: Pro
                 onJudged={(verdict) => onWrite(current.id, verdict)}
                 onPenOnlyBlocked={() => setBlocked(true)}
                 actions={say}
+                onNext={() => go(1)}
               />
             </div>
           )}
@@ -285,17 +286,6 @@ export function Handwriting({ state, syncText, syncOk, onSetting, onWrite }: Pro
                 )
               })}
             </div>
-          </div>
-
-          {/* 寫完之後手在畫布下方，上一個／下一個放這裡才好按 */}
-          <div className="wnav">
-            <button type="button" className="btn" onClick={() => go(-1)}>
-              上一個
-            </button>
-            <button type="button" className="btn btn-green" onClick={() => go(1)}>
-              <Icon name="check" />
-              寫好了，下一個
-            </button>
           </div>
 
           <p className="hint wnote">手寫有自己的熟練度，跟辨識分開排複習。會認不代表會寫。</p>

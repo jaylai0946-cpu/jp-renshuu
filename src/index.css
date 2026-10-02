@@ -1470,9 +1470,6 @@ h3 {
 .wcard {
   order: 2;
 }
-.wnav {
-  order: 3;
-}
 .wnote {
   order: 4;
 }
@@ -1484,15 +1481,6 @@ h3 {
 }
 .wmodes {
   flex-basis: 100%;
-}
-.wnav {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
-  gap: 12px;
-}
-.wnav .btn {
-  padding: 0 12px;
-  white-space: nowrap;
 }
 .hint {
   margin: 0;
@@ -1548,8 +1536,9 @@ h3 {
 .wresult {
   width: 100%;
   display: flex;
-  align-items: flex-start;
-  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
   padding: 12px 14px;
   border-radius: 16px;
   border: 2px solid var(--edge);
@@ -1576,6 +1565,28 @@ h3 {
 }
 .wresult b {
   font-size: 16px;
+}
+.wresult-text {
+  flex: 1;
+  min-width: 140px;
+}
+.wresult-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+.wresult-actions .btn:not(.btn-sm) {
+  min-height: 48px;
+  padding: 0 22px;
+  white-space: nowrap;
+}
+@media (max-width: 767px) {
+  .wresult-actions {
+    width: 100%;
+  }
+  .wresult-actions .btn {
+    flex: 1;
+  }
 }
 
 /* 手寫提示蓋在畫布上，不佔版面高度——佔高度的話會把下面的按鈕
@@ -2207,9 +2218,6 @@ select {
     border-color: var(--edge);
     color: #fff;
     box-shadow: 0 3px 0 var(--edge);
-  }
-  .wnav {
-    margin-top: auto;
   }
 
   /* 造句：左 4 右 8 */

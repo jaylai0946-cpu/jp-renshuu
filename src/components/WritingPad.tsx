@@ -24,6 +24,11 @@ export interface WritingPadProps {
   onPenOnlyBlocked?: () => void
   /** 插在工具列裡的額外按鈕（手寫分頁的「唸一次」） */
   actions?: ReactNode
+  /**
+   * 有給的話，寫完判分後工具列換成結果列：寫對出現「下一個」、寫錯出現「重來」，
+   * 形狀偏了兩顆都給。手寫分頁用；每日練習的默寫題由回合自己的「繼續」接手，不給
+   */
+  onNext?: () => void
 }
 
 interface CellState {
@@ -53,6 +58,7 @@ export function WritingPad({
   onJudged,
   onPenOnlyBlocked,
   actions,
+  onNext,
 }: WritingPadProps) {
   const chars = useMemo(() => [...text], [text])
   const [cells, setCells] = useState<CellState[]>(() => chars.map(emptyCell))
@@ -167,11 +173,11 @@ export function WritingPad({
       </p>
 
       {overall ? (
-        <div className={`wresult ${overall === 'bad' ? 'bad' : overall === 'ok' ? 'good' : ''}`}>
+        <div className={`wresult ${overall === 'bad' ? 'bad' : overall === 'ok' ? 'good' : ''}`} role="status">
           <span className="mark" aria-hidden="true">
             {VERDICT_LABEL[overall].mark}
           </span>
-          <div>
+          <div className="wresult-text">
             <b>{VERDICT_LABEL[overall].text}</b>
             {scores.map((s, i) => (
               <div className="small" key={i}>
@@ -180,21 +186,44 @@ export function WritingPad({
               </div>
             ))}
           </div>
+          {onNext ? (
+            <div className="wresult-actions">
+              {/* 默寫寫錯時想先看正確寫法再重來 */}
+              {mode === 'blind' && overall !== 'ok' ? (
+                <button type="button" className="btn btn-sm" onClick={() => setShowGhost((v) => !v)}>
+                  {ghostLabel(mode, showGhost)}
+                </button>
+              ) : null}
+              {overall !== 'ok' ? (
+                <button type="button" className={`btn ${overall === 'bad' ? 'btn-red' : ''}`} onClick={reset}>
+                  重來
+                </button>
+              ) : null}
+              {overall !== 'bad' ? (
+                <button type="button" className="btn btn-green" onClick={onNext}>
+                  下一個
+                </button>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       ) : null}
 
-      <div className="tools">
-        <button type="button" className="btn btn-sm" onClick={() => setShowGhost((v) => !v)}>
-          {ghostLabel(mode, showGhost)}
-        </button>
-        {actions}
-        <button type="button" className="btn btn-sm" onClick={undo} disabled={!written}>
-          上一筆復原
-        </button>
-        <button type="button" className="btn btn-sm" onClick={reset} disabled={!written}>
-          清除
-        </button>
-      </div>
+      {/* 結果列自己有重來／下一個，寫完就把工具列收起來，免得版面變高 */}
+      {overall && onNext ? null : (
+        <div className="tools">
+          <button type="button" className="btn btn-sm" onClick={() => setShowGhost((v) => !v)}>
+            {ghostLabel(mode, showGhost)}
+          </button>
+          {actions}
+          <button type="button" className="btn btn-sm" onClick={undo} disabled={!written}>
+            上一筆復原
+          </button>
+          <button type="button" className="btn btn-sm" onClick={reset} disabled={!written}>
+            清除
+          </button>
+        </div>
+      )}
     </>
   )
 }
