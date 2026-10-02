@@ -149,7 +149,7 @@ export function Handwriting({ state, syncText, syncOk, onSetting, onWrite }: Pro
             <div className="whead-mid">
               <span className="ch">
                 {mode === 'blind' ? (
-                  <span className="ro">{current.ro}</span>
+                  <span className="ro prompt-ro">{current.ro}</span>
                 ) : (
                   <>
                     <span lang="ja">{current.ch}</span>

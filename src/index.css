@@ -1444,6 +1444,14 @@ h3 {
   font-weight: 600;
   color: var(--blue-text);
 }
+/* 默寫時羅馬拼音就是題目，要夠大才看得清楚 */
+.whead-mid .ch .ro.prompt-ro {
+  display: block;
+  font-size: 36px;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: 1px;
+}
 .whead-mid .muted {
   font-size: 13px;
   font-weight: 700;
@@ -2181,6 +2189,9 @@ select {
   }
   .kanagrid button.two {
     font-size: 14px;
+  }
+  .whead-mid .ch .ro.prompt-ro {
+    font-size: 44px;
   }
   .kanagrid.ro button {
     font-family: var(--num);
