@@ -252,20 +252,24 @@ export function Handwriting({ state, syncText, syncOk, onSetting, onWrite }: Pro
               </h2>
               <span className="muted small num">{learned} / {items.length} 學過</span>
             </div>
-            <div className="kanagrid" role="group" aria-label="選字">
-              {items.map((it, i) => (
-                <button
-                  type="button"
-                  key={it.id}
-                  lang="ja"
-                  className={`${state.items[it.id] ? '' : 'new'}${[...it.ch].length > 1 ? ' two' : ''}`}
-                  aria-current={i === index ? 'true' : undefined}
-                  aria-label={`練寫 ${it.ch}`}
-                  onClick={() => setIndex(i)}
-                >
-                  {it.ch}
-                </button>
-              ))}
+            {/* 默寫時選字表改顯示羅馬拼音：顯示假名的話，紅底那格就是答案 */}
+            <div className={`kanagrid${mode === 'blind' ? ' ro' : ''}`} role="group" aria-label="選字">
+              {items.map((it, i) => {
+                const label = mode === 'blind' ? it.ro : it.ch
+                return (
+                  <button
+                    type="button"
+                    key={it.id}
+                    lang={mode === 'blind' ? undefined : 'ja'}
+                    className={`${state.items[it.id] ? '' : 'new'}${mode !== 'blind' && [...it.ch].length > 1 ? ' two' : ''}`}
+                    aria-current={i === index ? 'true' : undefined}
+                    aria-label={`練寫 ${label}`}
+                    onClick={() => setIndex(i)}
+                  >
+                    {label}
+                  </button>
+                )
+              })}
             </div>
           </div>
 

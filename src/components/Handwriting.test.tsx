@@ -65,8 +65,24 @@ describe('手寫分頁', () => {
   it('默寫模式只顯示羅馬拼音，不露出假名', () => {
     openWriting()
     fireEvent.click(screen.getByRole('button', { name: '默寫' }))
+    // 平假名 ぁ–ゖ、片假名 ァ–ヺ（不含「・」這類符號）
+    const kana = /[ぁ-ゖァ-ヺ]/
     // 標題那格顯示的是 a 不是 あ
-    expect(screen.getByText('a')).toBeInTheDocument()
+    const head = document.querySelector('.whead-mid')!
+    expect(head.textContent).toContain('a')
+    expect(head.textContent).not.toMatch(kana)
+    // 電腦版的選字表也不能露出假名——紅底那格就是答案
+    const grid = document.querySelector('.kanagrid')!
+    expect(grid.textContent).not.toMatch(kana)
+    expect(screen.getByRole('button', { name: '練寫 a' })).toHaveAttribute('aria-current', 'true')
+    expect(screen.queryByRole('button', { name: '練寫 あ' })).toBeNull()
+  })
+
+  it('換回看筆順，選字表又顯示假名', () => {
+    openWriting()
+    fireEvent.click(screen.getByRole('button', { name: '默寫' }))
+    fireEvent.click(screen.getByRole('button', { name: '看筆順' }))
+    expect(screen.getByRole('button', { name: '練寫 あ' })).toBeInTheDocument()
   })
 
   it('底部是上一個／下一個一對，發音在書寫卡的工具列', () => {

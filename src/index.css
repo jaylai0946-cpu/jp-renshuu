@@ -2182,6 +2182,11 @@ select {
   .kanagrid button.two {
     font-size: 14px;
   }
+  .kanagrid.ro button {
+    font-family: var(--num);
+    font-weight: 600;
+    font-size: 15px;
+  }
   .kanagrid button.new {
     border-color: var(--line);
     color: var(--faint);
