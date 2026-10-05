@@ -394,6 +394,55 @@ describe('App', () => {
     })
   })
 
+  describe('隨機複習可以一直用', () => {
+    /** 把一回合答完（每題都點正確答案），回到首頁 */
+    function playRoundCorrectly() {
+      for (let guard = 0; guard < 100; guard++) {
+        if (screen.queryByRole('button', { name: '回首頁' })) break
+        const hit = screen.queryByTestId('haptic-hit')
+        if (hit && !hit.classList.contains('off')) {
+          fireEvent.click(hit)
+          continue
+        }
+        fireEvent.click(screen.getByRole('button', { name: '繼續' }))
+      }
+      fireEvent.click(screen.getByRole('button', { name: '回首頁' }))
+    }
+
+    beforeEach(() => {
+      // 今天的份已經做完：學過的字都是明天才到期。默寫照預設開著
+      seed((s) => {
+        for (const it of UNIT_BY_ID['h1'].items.slice(0, 10)) {
+          s.items[it.id] = { b: 1, due: '2099-01-01', seen: 1, wrong: 0 }
+        }
+        s.newDay = { d: ymd(), n: s.settings.newPerDay }
+      })
+    })
+
+    it('連續複習兩次，按鈕都還在，也不會冒出新的今日題目', () => {
+      render(<App />)
+      expect(screen.getByText('今天的份做完了')).toBeInTheDocument()
+
+      for (let round = 1; round <= 2; round++) {
+        fireEvent.click(screen.getByRole('button', { name: /隨機複習/ }))
+        expect(screen.getByText('這個怎麼唸？')).toBeInTheDocument()
+        playRoundCorrectly()
+        // 以前：複習答對讓字跳一格、提早進默寫，首頁變成「今天有 5 題」、複習按鈕消失
+        expect(screen.getByText('今天的份做完了')).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: /隨機複習/ })).toBeInTheDocument()
+      }
+    })
+
+    it('今天還有題目時，隨機複習的按鈕也在', () => {
+      seed((s) => {
+        s.items['h:あ'] = { b: 1, due: '2020-01-01', seen: 1, wrong: 0 }
+      })
+      render(<App />)
+      expect(screen.getByRole('button', { name: '開始今日練習' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /隨機複習/ })).toBeInTheDocument()
+    })
+  })
+
   it('「我已經會了」把整個單元標成盒子 3', () => {
     render(<App />)
     fireEvent.click(screen.getByRole('button', { name: /單元/ }))

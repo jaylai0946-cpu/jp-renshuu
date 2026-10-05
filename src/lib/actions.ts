@@ -46,7 +46,17 @@ export function answerQuestion(
   let next = state
   if (first) {
     const before = state.items[id] ?? newProgress(today)
-    next = { ...next, items: { ...next.items, [id]: schedule(before, ok, today) } }
+    /*
+     * 還沒到期的字（隨機複習、單元練習會出）答對不升級。
+     *
+     * 不然剛學的字當天多複習一次就跳一格：間隔被拉長、還提早被排進默寫題，
+     * 「今天的份做完了」又冒出新的題目。答錯照樣降級——額外練習抓到不熟的字，
+     * 就該讓它早點回來。
+     */
+    const notDueYet = before.due > today
+    if (!(ok && notDueYet)) {
+      next = { ...next, items: { ...next.items, [id]: schedule(before, ok, today) } }
+    }
     next = bumpHist(next, today, { n: 1, c: ok ? 1 : 0 })
   }
   const xp = ok ? (first ? XP_FIRST_CORRECT : XP_RETRY_CORRECT) : 0

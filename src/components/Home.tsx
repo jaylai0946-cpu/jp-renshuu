@@ -137,9 +137,18 @@ export function Home({ state, today, streak, xp, onStart, onExtra, onRandom, onP
 
         <div className="today-side">
           {pending ? (
-            <button type="button" className="btn btn-red block" onClick={onStart}>
-              開始今日練習
-            </button>
+            <>
+              <button type="button" className="btn btn-red block" onClick={onStart}>
+                開始今日練習
+              </button>
+              {/* 今天還有題目時也留著：想多複習幾次的人不該找不到入口 */}
+              {learnedAny ? (
+                <button type="button" className="btn block" onClick={onRandom}>
+                  <Icon name="shuffle" />
+                  隨機複習 10 題
+                </button>
+              ) : null}
+            </>
           ) : (
             <div className="actions">
               {hasNew ? (
