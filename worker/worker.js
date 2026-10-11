@@ -162,6 +162,36 @@ function utcDay() {
   return new Date().toISOString().slice(0, 10)
 }
 
+/**
+ * Claude API 回錯時，轉成給使用者看的話。
+ *
+ * 上游的訊息原文不吐回前端（可能有帳務或金鑰相關的內容），只說是哪一類問題，
+ * 附上狀態碼方便管理員查。原文寫進 Worker 的 log，在 Cloudflare 後台看得到。
+ */
+async function upstreamError(upstream, what) {
+  let type = ''
+  let message = ''
+  try {
+    const body = await upstream.json()
+    type = String(body?.error?.type ?? '')
+    message = String(body?.error?.message ?? '')
+  } catch {
+    // 不是 JSON 就算了
+  }
+  console.error(`claude api ${upstream.status} ${type}: ${message.slice(0, 300)}`)
+
+  const s = upstream.status
+  const billing = s === 402 || type === 'billing_error' || /credit|billing/i.test(message)
+  let error
+  if (s === 429) error = `${what}服務忙碌中，等一分鐘再按`
+  else if (billing) error = `${what}暫停：API 額度不足，請管理員到 Anthropic Console 確認額度`
+  else if (s === 401 || s === 403) error = `${what}暫停：伺服器的 API key 不對，請管理員重新設定 ANTHROPIC_API_KEY`
+  else if (s === 404) error = `${what}暫停：找不到模型，請管理員檢查 Worker 設定`
+  else if (s >= 500) error = `${what}服務暫時有問題，等幾分鐘再試`
+  else error = `${what}沒有完成，再試一次`
+  return json({ error: `${error}（代碼 ${s}）` }, s === 429 ? 429 : 502)
+}
+
 async function handleGrade(request, env, key) {
   if (request.method !== 'POST') return json({ error: 'method not allowed' }, 405)
   if (!env.ANTHROPIC_API_KEY) {
@@ -229,11 +259,7 @@ async function handleGrade(request, env, key) {
     return json({ error: '連不上批改服務，等一下再試' }, 502)
   }
 
-  if (!upstream.ok) {
-    // 不要把上游的錯誤原封不動吐回前端，裡面可能有帳務或金鑰相關的訊息
-    const status = upstream.status === 429 ? 429 : 502
-    return json({ error: status === 429 ? '批改服務忙碌中，等一分鐘再按' : '批改沒有完成，再試一次' }, status)
-  }
+  if (!upstream.ok) return upstreamError(upstream, '批改')
 
   const data = await upstream.json()
   if (data.stop_reason === 'refusal') {
@@ -336,10 +362,7 @@ async function handleSong(request, env, key) {
   } catch {
     return json({ error: '連不上分析服務，等一下再試' }, 502)
   }
-  if (!upstream.ok) {
-    const status = upstream.status === 429 ? 429 : 502
-    return json({ error: status === 429 ? '分析服務忙碌中，等一分鐘再按' : '分析沒有完成，再試一次' }, status)
-  }
+  if (!upstream.ok) return upstreamError(upstream, '分析')
 
   const data = await upstream.json()
   if (data.stop_reason === 'refusal') return json({ error: '這首歌沒辦法分析，換一首試試' }, 422)

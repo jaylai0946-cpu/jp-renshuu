@@ -209,6 +209,25 @@ describe('/grade', () => {
     expect(await res.text()).not.toContain('credit')
   })
 
+  it('上游錯誤說得出是哪一類，管理員才知道要修什麼', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const cases = [
+      [401, { error: { type: 'authentication_error', message: 'invalid x-api-key' } }, 'API key'],
+      [400, { error: { type: 'invalid_request_error', message: 'Your credit balance is too low' } }, '額度不足'],
+      [404, { error: { type: 'not_found_error', message: 'model' } }, '找不到模型'],
+      [529, { error: { type: 'overloaded_error', message: 'Overloaded' } }, '暫時有問題'],
+    ]
+    for (const [status, body, text] of cases) {
+      vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(body), { status })))
+      const res = await worker.fetch(post(`/grade/${KEY}`, { prompt: 'a', answer: 'b' }), env())
+      const { error } = await res.json()
+      expect(res.status, String(status)).toBe(502)
+      expect(error).toContain(text)
+      expect(error).toContain(`代碼 ${status}`)
+      expect(error).not.toContain('x-api-key')
+    }
+  })
+
   it('上游 429 轉成 429', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 429 })))
     expect((await worker.fetch(post(`/grade/${KEY}`, { prompt: 'a', answer: 'b' }), env())).status).toBe(429)
