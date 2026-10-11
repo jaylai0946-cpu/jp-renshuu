@@ -210,7 +210,7 @@ describe('/grade', () => {
   })
 
   it('上游錯誤說得出是哪一類，管理員才知道要修什麼', async () => {
-    vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.spyOn(console, 'log').mockImplementation(() => {})
     const cases = [
       [401, { error: { type: 'authentication_error', message: 'invalid x-api-key' } }, 'API key'],
       [400, { error: { type: 'invalid_request_error', message: 'Your credit balance is too low' } }, '額度不足'],
@@ -226,6 +226,15 @@ describe('/grade', () => {
       expect(error).toContain(`代碼 ${status}`)
       expect(error).not.toContain('x-api-key')
     }
+  })
+
+  it('其他 400 把原因帶回來給管理員看，但遮掉 key', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+    const body = { error: { type: 'invalid_request_error', message: 'output_config.format: bad schema (key sk-ant-api03-abc_DEF)' } }
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(body), { status: 400 })))
+    const { error } = await (await worker.fetch(post(`/grade/${KEY}`, { prompt: 'a', answer: 'b' }), env())).json()
+    expect(error).toContain('原因：output_config.format: bad schema')
+    expect(error).not.toContain('sk-ant-api03')
   })
 
   it('上游 429 轉成 429', async () => {

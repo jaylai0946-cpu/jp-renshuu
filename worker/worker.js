@@ -178,7 +178,7 @@ async function upstreamError(upstream, what) {
   } catch {
     // 不是 JSON 就算了
   }
-  console.error(`claude api ${upstream.status} ${type}: ${message.slice(0, 300)}`)
+  console.log(`claude api ${upstream.status} ${type}: ${message.slice(0, 300)}`)
 
   const s = upstream.status
   const billing = s === 402 || type === 'billing_error' || /credit|billing/i.test(message)
@@ -188,7 +188,11 @@ async function upstreamError(upstream, what) {
   else if (s === 401 || s === 403) error = `${what}暫停：伺服器的 API key 不對，請管理員重新設定 ANTHROPIC_API_KEY`
   else if (s === 404) error = `${what}暫停：找不到模型，請管理員檢查 Worker 設定`
   else if (s >= 500) error = `${what}服務暫時有問題，等幾分鐘再試`
-  else error = `${what}沒有完成，再試一次`
+  else {
+    // 其他 400 多半是請求格式的問題，原文對管理員最有用；帳務類上面已經分出去了
+    const detail = message.replace(/sk-ant-[\w-]+/g, '***').slice(0, 160)
+    error = `${what}沒有完成，再試一次` + (detail ? `。原因：${detail}` : '')
+  }
   return json({ error: `${error}（代碼 ${s}）` }, s === 429 ? 429 : 502)
 }
 
