@@ -237,6 +237,15 @@ describe('/grade', () => {
     expect(error).not.toContain('sk-ant-api03')
   })
 
+  it('有設 ANTHROPIC_WORKSPACE_ID 才帶 workspace header', async () => {
+    const f = vi.fn(async () => claudeReply(GOOD))
+    vi.stubGlobal('fetch', f)
+    await worker.fetch(post(`/grade/${KEY}`, { prompt: 'a', answer: 'b' }), env())
+    expect(f.mock.calls[0][1].headers['anthropic-workspace-id']).toBeUndefined()
+    await worker.fetch(post(`/grade/${KEY}`, { prompt: 'a', answer: 'b' }), { ...env(), ANTHROPIC_WORKSPACE_ID: 'wrkspc_1' })
+    expect(f.mock.calls[1][1].headers['anthropic-workspace-id']).toBe('wrkspc_1')
+  })
+
   it('上游 429 轉成 429', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 429 })))
     expect((await worker.fetch(post(`/grade/${KEY}`, { prompt: 'a', answer: 'b' }), env())).status).toBe(429)

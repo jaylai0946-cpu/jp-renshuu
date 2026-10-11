@@ -212,6 +212,11 @@ npx wrangler deploy
 
 沒設定的話「造句」分頁會說批改功能沒開，其他功能照常。
 
+API key 要建在某個 workspace 底下（Console 建 key 時選 **Default**）。
+如果用的是沒綁 workspace 的組織層級 key，Claude 會回「must include the
+anthropic-workspace-id header」——這時再加一個變數 `ANTHROPIC_WORKSPACE_ID`，
+值是 Console → Workspaces 裡那個 workspace 的 ID（`wrkspc_` 開頭）。
+
 ### 防濫用
 
 API key 放在那裡，沒有上限就是把錢包交出去。四道關卡：

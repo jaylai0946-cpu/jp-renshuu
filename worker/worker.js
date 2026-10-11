@@ -157,6 +157,20 @@ function globalDailyLimit(env) {
   return Number.isFinite(n) && n >= 0 ? n : GRADE_GLOBAL_DAILY
 }
 
+/**
+ * 呼叫 Claude API 的 header。
+ * 組織層級的 key（沒綁 workspace）要另外帶 workspace id，設了 ANTHROPIC_WORKSPACE_ID 才加。
+ */
+function claudeHeaders(env) {
+  const headers = {
+    'Content-Type': 'application/json',
+    'x-api-key': env.ANTHROPIC_API_KEY,
+    'anthropic-version': '2023-06-01',
+  }
+  if (env.ANTHROPIC_WORKSPACE_ID) headers['anthropic-workspace-id'] = env.ANTHROPIC_WORKSPACE_ID
+  return headers
+}
+
 /** YYYY-MM-DD（UTC）。用來當每日計數的 key */
 function utcDay() {
   return new Date().toISOString().slice(0, 10)
@@ -246,11 +260,7 @@ async function handleGrade(request, env, key) {
   try {
     upstream = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': env.ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-      },
+      headers: claudeHeaders(env),
       body: JSON.stringify({
         model: MODEL,
         max_tokens: 1024,
@@ -351,11 +361,7 @@ async function handleSong(request, env, key) {
   try {
     upstream = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': env.ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-      },
+      headers: claudeHeaders(env),
       body: JSON.stringify({
         model: MODEL,
         max_tokens: 16000,
