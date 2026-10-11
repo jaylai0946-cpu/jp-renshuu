@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { mergeStates } from './merge'
-import { buildSongQuiz, glossSegments, parseYouTubeId, songWords, uniqueLineCount, wordKey } from './songs'
+import { buildSongQuiz, glossSegments, parseYouTubeId, songWords, splitLyrics, uniqueLineCount, wordKey } from './songs'
 import { emptyState } from './storage'
 import { validSong, validateAppState } from './validate'
 import type { Song, SongLine } from '../types'
@@ -147,5 +147,24 @@ describe('glossSegments', () => {
     const segs = glossSegments('夜になった', [w('夜に'), w('になる'), w('に'), w('なった')])
     expect(segs.map((x) => x.text).join('')).toBe('夜になった')
     expect(segs.filter((x) => x.word).map((x) => x.text)).toEqual(['夜に', 'なった'])
+  })
+})
+
+describe('splitLyrics', () => {
+  it('日文、中文交錯貼：中文行分出去，日文行留著', () => {
+    const r = splitLyrics('僕はずっと月光を呑んでる\n我一直喝著月光\n\n本当なんだ 夜みたいで\n是真的喔 像夜晚一樣\n')
+    expect(r.jp).toBe('僕はずっと月光を呑んでる\n本当なんだ 夜みたいで')
+    expect(r.zh).toBe('我一直喝著月光\n是真的喔 像夜晚一樣')
+    expect(r.zhLines).toBe(2)
+  })
+
+  it('純漢字的日文短句、羅馬拼音不會被當成中文', () => {
+    const r = splitLyrics('月光\n夏祭り\nLa la la\n嘘月')
+    expect(r.zhLines).toBe(0)
+    expect(r.jp.split('\n')).toHaveLength(4)
+  })
+
+  it('簡體中文也認得', () => {
+    expect(splitLyrics('这是我们的夏天').zhLines).toBe(1)
   })
 })

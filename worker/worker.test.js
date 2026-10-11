@@ -380,6 +380,25 @@ describe('/song', () => {
     expect([...sent.messages[0].content.matchAll(/^\d+: /gm)]).toHaveLength(3)
   })
 
+  it('附了中文歌詞就放進 prompt，要模型以那份為主；沒附就自己意譯', async () => {
+    const spy = vi.fn(async () => claudeReply({ lines: [] }))
+    vi.stubGlobal('fetch', spy)
+    await worker.fetch(post(`/song/${KEY}`, { title: '空', lyrics: '青い空', zh: '湛藍的天空' }), env())
+    const withZh = JSON.parse(spy.mock.calls[0][1].body).messages[0].content
+    expect(withZh).toContain('學生附的中文歌詞：\n湛藍的天空')
+    expect(withZh).toContain('以那份為主')
+
+    await worker.fetch(post(`/song/${KEY}`, { title: '空', lyrics: '青い空' }), env())
+    const without = JSON.parse(spy.mock.calls[1][1].body).messages[0].content
+    expect(without).not.toContain('學生附的中文歌詞')
+    expect(without).toContain('意譯')
+  })
+
+  it('中文歌詞太長就擋', async () => {
+    const res = await worker.fetch(post(`/song/${KEY}`, { title: '空', lyrics: '青い空', zh: '天'.repeat(4001) }), env())
+    expect(res.status).toBe(400)
+  })
+
   it('模型漏掉的句子留原文，不讓整首失敗', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => claudeReply({ lines: [{ i: 0, kana: 'あおいそら', ro: '', zh: '藍天', words: [], note: '' }] })))
     const res = await worker.fetch(post(`/song/${KEY}`, { title: '空', lyrics: '青い空\n君と歩く' }), env())

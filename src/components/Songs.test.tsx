@@ -137,10 +137,40 @@ describe('歌曲', () => {
       fireEvent.click(screen.getByRole('button', { name: '重新分析' }))
     })
     expect(songCalls).toHaveLength(2)
+    // AI 翻的翻譯不送回去，讓它重翻
     expect(songCalls[1]).toEqual({ title: '空の歌', artist: '某歌手', lyrics: '青い空を見上げて\n君と歩いた道' })
     const saved: AppState = JSON.parse(localStorage.getItem(STORAGE_KEY)!)
     expect(saved.songs.filter((x) => !x.deleted)).toHaveLength(1)
     expect(saved.songs[0]).toMatchObject({ video: 'dQw4w9WgXcQ', known: ['見上げて|みあげて'] })
+  })
+
+  it('日中交錯貼、另外貼中文：只送日文去分析，中文當翻譯參考；重新分析沿用自己的翻譯', async () => {
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: /歌曲/ }))
+    fireEvent.click(screen.getByRole('button', { name: /新增第一首歌/ }))
+    fireEvent.change(screen.getByLabelText('歌名'), { target: { value: '空の歌' } })
+    fireEvent.change(screen.getByLabelText(/日文歌詞/), {
+      target: { value: '青い空を見上げて\n抬頭望著藍天\n君と歩いた道' },
+    })
+    expect(screen.getByText(/裡面有 1 行中文/)).toBeInTheDocument()
+    expect(screen.getByText(/2 \/ 60 句/)).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText(/中文歌詞/), { target: { value: '和你走過的路' } })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '分析歌詞' }))
+    })
+    expect(songCalls[0]).toEqual({
+      title: '空の歌',
+      artist: '',
+      lyrics: '青い空を見上げて\n君と歩いた道',
+      zh: '抬頭望著藍天\n和你走過的路',
+    })
+    const saved: AppState = JSON.parse(localStorage.getItem(STORAGE_KEY)!)
+    expect(saved.songs[0].ownZh).toBe(true)
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '重新分析' }))
+    })
+    expect(songCalls[1]).toMatchObject({ zh: '抬頭望著藍天\n和你走過的路' })
   })
 
   it('把中文關掉可以先自己猜', async () => {

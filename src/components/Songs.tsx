@@ -10,6 +10,7 @@ import {
   newSongId,
   parseYouTubeId,
   songWords,
+  splitLyrics,
   uniqueLineCount,
   wordKey,
   type SongQuestion,
@@ -155,12 +156,16 @@ function AddSong({
   const [artist, setArtist] = useState('')
   const [video, setVideo] = useState('')
   const [lyrics, setLyrics] = useState('')
+  const [zhText, setZhText] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
-  const lines = uniqueLineCount(lyrics)
+  // 日文、中文交錯貼進來的話，中文行分出去當翻譯參考，不算句數
+  const split = splitLyrics(lyrics)
+  const zh = [split.zh, zhText.trim()].filter(Boolean).join('\n')
+  const lines = uniqueLineCount(split.jp)
   const videoId = parseYouTubeId(video)
-  const tooLong = lines > SONG_MAX_LINES || lyrics.length > SONG_MAX_CHARS
+  const tooLong = lines > SONG_MAX_LINES || split.jp.length > SONG_MAX_CHARS || zh.length > SONG_MAX_CHARS
 
   async function submit() {
     if (!config || busy) return
@@ -169,10 +174,16 @@ function AddSong({
     if (video.trim() && !videoId) return setError('看不懂這個 YouTube 連結，可以留空')
     setError('')
     setBusy(true)
-    const res = await analyzeSong(config, { title: title.trim(), artist: artist.trim(), lyrics })
+    const res = await analyzeSong(config, {
+      title: title.trim(),
+      artist: artist.trim(),
+      lyrics: split.jp,
+      ...(zh ? { zh } : {}),
+    })
     setBusy(false)
     if (res.status === 'error') return setError(res.message)
     const song = validSong({
+      ...(zh ? { ownZh: true } : {}),
       id: newSongId(),
       title: res.title,
       artist: res.artist,
@@ -239,11 +250,26 @@ function AddSong({
             rows={10}
             value={lyrics}
             onChange={(e) => setLyrics(e.target.value)}
-            placeholder="從歌詞網站複製整首貼上"
+            placeholder="從歌詞網站複製整首貼上（日文、中文一行一行交錯也可以）"
           />
           <p className={`small ${tooLong ? 'err' : 'muted'}`} style={{ margin: 0 }}>
             {lines} / {SONG_MAX_LINES} 句（重複的副歌只算一次）
           </p>
+          {split.zhLines ? (
+            <p className="muted small" style={{ margin: 0 }}>
+              裡面有 {split.zhLines} 行中文，會當成中文翻譯，不算句數。
+            </p>
+          ) : null}
+
+          <label htmlFor="song-zh">中文歌詞（選填，有貼的話翻譯以這份為主）</label>
+          <textarea
+            id="song-zh"
+            lang="zh-Hant"
+            rows={5}
+            value={zhText}
+            onChange={(e) => setZhText(e.target.value)}
+            placeholder="可以留空，讓 AI 翻譯"
+          />
 
           <p className="muted small" style={{ margin: 0 }}>
             歌詞只存在你自己的帳號裡，不會分享給別人。分析一首大約 30–60 秒，每天最多 3 首。
@@ -316,6 +342,8 @@ function SongView({
       title: song.title,
       artist: song.artist,
       lyrics: song.lines.map((l) => l.jp).join('\n'),
+      // 自己貼的翻譯要沿用；AI 翻的就讓它重翻
+      ...(song.ownZh ? { zh: song.lines.map((l) => l.zh).join('\n') } : {}),
     })
     setBusy(false)
     if (res.status === 'error') return setError(res.message)

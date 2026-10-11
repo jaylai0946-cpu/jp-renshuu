@@ -126,21 +126,27 @@ const SONG_SCHEMA = {
   additionalProperties: false,
 }
 
-function songPrompt(title, artist, lines) {
+function songPrompt(title, artist, lines, zh = '') {
+  const zhRule = zh
+    ? '- zh：學生附了中文歌詞（在下面），以那份為主：找出對應這一行的那句照抄，' +
+      '只能修明顯的錯字，不要改寫或潤飾；一句中文對到好幾行日文，就照日文的斷句拆開；' +
+      '真的找不到對應的才自己意譯（像中文歌詞那樣通順，不要翻譯腔）\n'
+    : '- zh：像台灣的中文歌詞那樣意譯。先讀完整首、搭配前後句理解意思，' +
+      '保留原本的畫面、比喻和語氣，句子要通順好唸；不要逐字硬翻、不要翻譯腔' +
+      '（例如「我是」「…的事情」「…著的」這類生硬句型），也不要在翻譯裡加解釋\n'
   return (
     '你是日語老師，學生是台灣的大一日文初學者。下面是學生自己貼上、用來個人學習的日文歌詞，' +
     '每行前面有編號。\n' +
     `歌名：${title}${artist ? `（${artist}）` : ''}\n\n` +
     lines.map((l, i) => `${i}: ${l}`).join('\n') +
+    (zh ? `\n\n學生附的中文歌詞：\n${zh}` : '') +
     '\n\n逐行分析，每一個編號都要回一筆，i 填那一行的編號，不要漏、不要合併：\n' +
     '- kana：整句讀音。漢字標成平假名，助詞は／へ照實際讀音寫成 わ／え\n' +
     '- ro：整句的赫本式羅馬拼音\n' +
-    '- zh：像台灣的中文歌詞那樣意譯。先讀完整首、搭配前後句理解意思，' +
-    '保留原本的畫面、比喻和語氣，句子要通順好唸；不要逐字硬翻、不要翻譯腔' +
-    '（例如「我是」「…的事情」「…著的」這類生硬句型），也不要在翻譯裡加解釋\n' +
+    zhRule +
     '- words：把這句拆成詞，依在歌詞裡出現的順序，列出所有實詞（名詞、動詞、形容詞、副詞、慣用說法），' +
     '單獨的助詞、です／ます不用列，一句最多 10 個。s 要和歌詞裡的寫法一字不差（照歌詞裡的活用形，' +
-    '辭書形放 b），zh 寫這個詞在這句裡的意思\n' +
+    '辭書形放 b），zh 寫這個詞在這句裡的意思，盡量和這句的中文翻譯用一樣的說法\n' +
     '- note：這句有值得一提的文法、口語縮約或歌詞特有的寫法時，用一兩句說明；沒有就空字串'
   )
 }
@@ -336,6 +342,8 @@ async function handleSong(request, env, key) {
   const lyrics = String(body?.lyrics ?? '')
   if (!title || !lyrics.trim()) return json({ error: '歌名和歌詞都要有' }, 400)
   if (lyrics.length > SONG_MAX_CHARS) return json({ error: `歌詞太長了，最多 ${SONG_MAX_CHARS} 個字` }, 400)
+  const zh = String(body?.zh ?? '').trim()
+  if (zh.length > SONG_MAX_CHARS) return json({ error: `中文歌詞太長了，最多 ${SONG_MAX_CHARS} 個字` }, 400)
 
   const all = lyrics
     .split(/\r?\n/)
@@ -368,7 +376,7 @@ async function handleSong(request, env, key) {
       body: JSON.stringify({
         model: MODEL,
         max_tokens: 32000,
-        messages: [{ role: 'user', content: songPrompt(title, artist, unique) }],
+        messages: [{ role: 'user', content: songPrompt(title, artist, unique, zh) }],
         output_config: { format: { type: 'json_schema', schema: SONG_SCHEMA } },
       }),
     })

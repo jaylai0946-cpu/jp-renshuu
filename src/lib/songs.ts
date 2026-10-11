@@ -5,6 +5,26 @@ import { urlFor, type SyncConfig } from './sync'
 export const SONG_MAX_LINES = 60
 export const SONG_MAX_CHARS = 4000
 
+const KANA = /[\u3041-\u3096\u30a1-\u30fa]/
+/** 日文幾乎不會用、中文歌詞很常見的字（繁簡都放）。沒有假名又有這些字的行就當成中文 */
+const CHINESE_ONLY = /[的了們们這这嗎吗麼么著着沒没說说會你妳她吧呢啊哦讓让給给從从为对个]/
+
+/**
+ * 從歌詞網站複製時常常日文、中文一行一行交錯。把中文行挑出來當翻譯參考，
+ * 只留日文行去分析。純漢字的日文短句（例如「月光」）沒有那些中文才有的字，會留在日文這邊。
+ */
+export function splitLyrics(text: string): { jp: string; zh: string; zhLines: number } {
+  const jp: string[] = []
+  const zh: string[] = []
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim()
+    if (!line) continue
+    if (!KANA.test(line) && CHINESE_ONLY.test(line)) zh.push(line)
+    else jp.push(line)
+  }
+  return { jp: jp.join('\n'), zh: zh.join('\n'), zhLines: zh.length }
+}
+
 /** 不同的句子有幾句（重複的副歌只算一次，跟 Worker 算法一樣） */
 export function uniqueLineCount(lyrics: string): number {
   return new Set(
@@ -104,7 +124,8 @@ function pickError(body: unknown, fallback: string): string {
 /** 送去 Worker 逐句分析。API key 只在 Worker 那邊 */
 export async function analyzeSong(
   config: SyncConfig,
-  input: { title: string; artist: string; lyrics: string },
+  /** zh：使用者自己貼的中文歌詞，有的話翻譯以這份為主 */
+  input: { title: string; artist: string; lyrics: string; zh?: string },
 ): Promise<AnalyzeResponse> {
   let res: Response
   try {

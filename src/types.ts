@@ -112,6 +112,8 @@ export interface Song {
   known: string[]
   /** 最後修改時間（ISO），兩台都改過同一首時取新的 */
   updated: string
+  /** 中文翻譯是使用者自己貼的（重新分析時要沿用，不能讓 AI 蓋掉） */
+  ownZh?: true
   /** 刪掉的歌留個墓碑，不然同步時另一台會把它加回來 */
   deleted?: true
 }

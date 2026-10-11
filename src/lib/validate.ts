@@ -158,6 +158,7 @@ function song(raw: unknown): Song | null {
         )
       : [],
     updated,
+    ...(raw.ownZh === true ? { ownZh: true as const } : {}),
   }
 }
 
