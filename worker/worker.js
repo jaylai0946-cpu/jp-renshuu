@@ -14,6 +14,7 @@
  *   DELETE /s/<key>      -> 200
  *   POST   /grade/<key>  -> 200 批改結果；429（這組密鑰今天用完了）；
  *                           503（全站今天的額度用完了，見 GRADE_GLOBAL_DAILY）
+ *   POST   /song/<key>   -> 200 歌詞逐句分析；429／503 同上
  *
  * 部署：
  *   npx wrangler kv namespace create SYNC
@@ -37,6 +38,17 @@ const GRADE_DAILY_LIMIT = 50
  */
 const GRADE_GLOBAL_DAILY = 200
 const MAX_PROMPT_CHARS = 200
+
+/** 每組密鑰每天最多分析幾首歌 */
+const SONG_DAILY_LIMIT = 3
+/**
+ * 分析一首歌在全站額度裡算幾次批改。
+ * 一首歌大約是一次批改的 15 倍 token（約 US$0.04），用同一個額度管就不用多一個上限
+ */
+const SONG_WEIGHT = 15
+/** 不同的句子最多幾句。重複的副歌只算一次 */
+const SONG_MAX_LINES = 60
+const SONG_MAX_CHARS = 4000
 const MAX_ANSWER_CHARS = 500
 
 /** 便宜又快，批改一句日文綽綽有餘。約 US$0.0016 一次 */
@@ -76,6 +88,60 @@ const GRADE_SCHEMA = {
   additionalProperties: false,
 }
 
+/** 歌詞分析的回傳形狀 */
+const SONG_SCHEMA = {
+  type: 'object',
+  properties: {
+    lines: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          i: { type: 'integer', description: '對應輸入的行號' },
+          kana: { type: 'string', description: '整句的讀音，平假名（外來語可用片假名）' },
+          ro: { type: 'string', description: '整句的赫本式羅馬拼音' },
+          zh: { type: 'string', description: '台灣繁體中文翻譯，自然的意譯' },
+          words: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                s: { type: 'string', description: '在歌詞裡出現的樣子' },
+                k: { type: 'string', description: '讀音，平假名' },
+                b: { type: 'string', description: '辭書形；和 s 一樣就給空字串' },
+                zh: { type: 'string', description: '在這句裡的意思，簡短的繁體中文' },
+              },
+              required: ['s', 'k', 'b', 'zh'],
+              additionalProperties: false,
+            },
+          },
+          note: { type: 'string', description: '值得一提的文法或歌詞用法，一兩句繁體中文；沒有就空字串' },
+        },
+        required: ['i', 'kana', 'ro', 'zh', 'words', 'note'],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ['lines'],
+  additionalProperties: false,
+}
+
+function songPrompt(title, artist, lines) {
+  return (
+    '你是日語老師，學生是台灣的大一日文初學者。下面是學生自己貼上、用來個人學習的日文歌詞，' +
+    '每行前面有編號。\n' +
+    `歌名：${title}${artist ? `（${artist}）` : ''}\n\n` +
+    lines.map((l, i) => `${i}: ${l}`).join('\n') +
+    '\n\n逐行分析，每一個編號都要回一筆，i 填那一行的編號，不要漏、不要合併：\n' +
+    '- kana：整句讀音。漢字標成平假名，助詞は／へ照實際讀音寫成 わ／え\n' +
+    '- ro：整句的赫本式羅馬拼音\n' +
+    '- zh：自然的台灣繁體中文翻譯\n' +
+    '- words：這句裡值得學的詞（名詞、動詞、形容詞、副詞、常見句型），助詞和太簡單的詞不用列，' +
+    '一句最多 6 個。s 要和歌詞裡的寫法一字不差\n' +
+    '- note：這句有值得一提的文法、口語縮約或歌詞特有的寫法時，用一兩句說明；沒有就空字串'
+  )
+}
+
 function gradePrompt(question, answer) {
   return (
     '你是溫和但精準的日語老師。學生是台灣的大一日文初學者（剛學完五十音、正在學基本句型）。\n' +
@@ -86,12 +152,12 @@ function gradePrompt(question, answer) {
   )
 }
 
-/** YYYY-MM-DD（UTC）。用來當每日計數的 key */
 function globalDailyLimit(env) {
   const n = Number(env.GRADE_GLOBAL_DAILY)
   return Number.isFinite(n) && n >= 0 ? n : GRADE_GLOBAL_DAILY
 }
 
+/** YYYY-MM-DD（UTC）。用來當每日計數的 key */
 function utcDay() {
   return new Date().toISOString().slice(0, 10)
 }
@@ -198,6 +264,125 @@ async function handleGrade(request, env, key) {
   return json({ result, used: used + 1, limit: GRADE_DAILY_LIMIT })
 }
 
+/**
+ * 歌詞逐句分析。
+ *
+ * 歌詞是使用者自己貼的，這裡不存——分析完回給 App，存在他自己的同步資料裡。
+ * 重複的句子（副歌）只送一次給 Claude，回來再展開，省一半以上的 token。
+ */
+async function handleSong(request, env, key) {
+  if (request.method !== 'POST') return json({ error: 'method not allowed' }, 405)
+  if (!env.ANTHROPIC_API_KEY) {
+    return json({ error: '這台 Worker 還沒設定 ANTHROPIC_API_KEY，歌詞分析沒開' }, 501)
+  }
+
+  // 跟批改一樣：要先同步過，才代表是這個 App 的使用者
+  const hasState = await env.SYNC.get(`state:${key}`, { type: 'text', cacheTtl: 3600 })
+  if (!hasState) {
+    return json({ error: '這組密鑰還沒同步過進度。先在 App 裡啟用同步並練一回合' }, 403)
+  }
+
+  let body
+  try {
+    body = await request.json()
+  } catch {
+    return json({ error: '不是合法的 JSON' }, 400)
+  }
+  const title = String(body?.title ?? '').trim().slice(0, 100)
+  const artist = String(body?.artist ?? '').trim().slice(0, 100)
+  const lyrics = String(body?.lyrics ?? '')
+  if (!title || !lyrics.trim()) return json({ error: '歌名和歌詞都要有' }, 400)
+  if (lyrics.length > SONG_MAX_CHARS) return json({ error: `歌詞太長了，最多 ${SONG_MAX_CHARS} 個字` }, 400)
+
+  const all = lyrics
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .map((l) => l.slice(0, 200))
+  const unique = [...new Set(all)]
+  if (!unique.length) return json({ error: '歌名和歌詞都要有' }, 400)
+  if (unique.length > SONG_MAX_LINES) {
+    return json({ error: `歌詞太長了：不同的句子最多 ${SONG_MAX_LINES} 句，這首有 ${unique.length} 句` }, 400)
+  }
+
+  const day = utcDay()
+  const globalKey = `grade-all:${day}`
+  const globalUsed = Number((await env.SYNC.get(globalKey)) ?? 0)
+  if (globalUsed + SONG_WEIGHT > globalDailyLimit(env)) {
+    return json({ error: '今天全站的 AI 額度用完了，明天再來' }, 503)
+  }
+  const counterKey = `song:${key}:${day}`
+  const used = Number((await env.SYNC.get(counterKey)) ?? 0)
+  if (used >= SONG_DAILY_LIMIT) {
+    return json({ error: `今天分析歌詞的次數用完了（每天 ${SONG_DAILY_LIMIT} 首），明天再來` }, 429)
+  }
+
+  let upstream
+  try {
+    upstream = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': env.ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        max_tokens: 16000,
+        messages: [{ role: 'user', content: songPrompt(title, artist, unique) }],
+        output_config: { format: { type: 'json_schema', schema: SONG_SCHEMA } },
+      }),
+    })
+  } catch {
+    return json({ error: '連不上分析服務，等一下再試' }, 502)
+  }
+  if (!upstream.ok) {
+    const status = upstream.status === 429 ? 429 : 502
+    return json({ error: status === 429 ? '分析服務忙碌中，等一分鐘再按' : '分析沒有完成，再試一次' }, status)
+  }
+
+  const data = await upstream.json()
+  if (data.stop_reason === 'refusal') return json({ error: '這首歌沒辦法分析，換一首試試' }, 422)
+  if (data.stop_reason === 'max_tokens') return json({ error: '這首歌太長了，分析到一半就停了。刪掉一些句子再試' }, 422)
+  const text = (data.content ?? []).find((b) => b.type === 'text')?.text
+  let parsed
+  try {
+    parsed = JSON.parse(text ?? '')
+  } catch {
+    return json({ error: '分析結果讀不懂，再試一次' }, 502)
+  }
+
+  // 用行號對回去；模型漏掉的句子留原文，至少不會整首失敗
+  const byIndex = new Map()
+  for (const l of Array.isArray(parsed?.lines) ? parsed.lines : []) {
+    if (Number.isInteger(l?.i) && l.i >= 0 && l.i < unique.length && !byIndex.has(l.i)) byIndex.set(l.i, l)
+  }
+  const analysed = unique.map((jp, i) => {
+    const l = byIndex.get(i)
+    return {
+      jp,
+      kana: String(l?.kana ?? ''),
+      ro: String(l?.ro ?? ''),
+      zh: String(l?.zh ?? ''),
+      words: Array.isArray(l?.words) ? l.words.slice(0, 12) : [],
+      note: String(l?.note ?? ''),
+    }
+  })
+  const lineOf = new Map(unique.map((jp, i) => [jp, analysed[i]]))
+
+  const ttl = { expirationTtl: 60 * 60 * 48 }
+  await Promise.all([
+    env.SYNC.put(counterKey, String(used + 1), ttl),
+    env.SYNC.put(globalKey, String(globalUsed + SONG_WEIGHT), ttl),
+  ])
+
+  return json({
+    song: { title, artist, lines: all.map((jp) => lineOf.get(jp)) },
+    used: used + 1,
+    limit: SONG_DAILY_LIMIT,
+  })
+}
+
 async function handleSync(request, env, key) {
   const kvKey = `state:${key}`
 
@@ -251,7 +436,7 @@ export default {
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS })
 
     const url = new URL(request.url)
-    const match = url.pathname.match(/^\/(s|grade)\/([^/]+)\/?$/)
+    const match = url.pathname.match(/^\/(s|grade|song)\/([^/]+)\/?$/)
     if (!match) return json({ error: 'not found' }, 404)
 
     const [, route, key] = match
@@ -260,6 +445,8 @@ export default {
       return json({ error: '密鑰格式不對，必須是 32 個小寫英數字' }, 400)
     }
 
-    return route === 'grade' ? handleGrade(request, env, key) : handleSync(request, env, key)
+    if (route === 'grade') return handleGrade(request, env, key)
+    if (route === 'song') return handleSong(request, env, key)
+    return handleSync(request, env, key)
   },
 }

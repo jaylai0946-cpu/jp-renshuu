@@ -301,3 +301,106 @@ describe('/grade', () => {
     })
   })
 })
+
+describe('/song', () => {
+  beforeEach(() => vi.unstubAllGlobals())
+  const day = () => new Date().toISOString().slice(0, 10)
+
+  /** 照送出去的行號，每句回一筆分析 */
+  function songReply(init) {
+    const prompt = JSON.parse(init.body).messages[0].content
+    const lines = [...prompt.matchAll(/^(\d+): (.+)$/gm)].map((m) => Number(m[1]))
+    return claudeReply({
+      lines: lines.map((i) => ({
+        i,
+        kana: `よみ${i}`,
+        ro: `romaji${i}`,
+        zh: `翻譯${i}`,
+        words: [{ s: '空', k: 'そら', b: '', zh: '天空' }],
+        note: '',
+      })),
+    })
+  }
+
+  const LYRICS = '青い空\n君と歩く\n\n青い空\n夢を見た'
+
+  it('逐句分析；重複的句子只送一次，回來再展開', async () => {
+    const spy = vi.fn(async (_url, init) => songReply(init))
+    vi.stubGlobal('fetch', spy)
+    const res = await worker.fetch(post(`/song/${KEY}`, { title: '空', artist: 'A', lyrics: LYRICS }), env())
+
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.song.lines.map((l) => l.jp)).toEqual(['青い空', '君と歩く', '青い空', '夢を見た'])
+    expect(body.song.lines[0]).toEqual(body.song.lines[2])
+    expect(body.song.lines[1]).toMatchObject({ kana: 'よみ1', zh: '翻譯1' })
+    expect(body.used).toBe(1)
+
+    // 送出去的只有三句不同的
+    const sent = JSON.parse(spy.mock.calls[0][1].body)
+    expect(sent.model).toBe('claude-haiku-4-5')
+    expect(sent.output_config.format.type).toBe('json_schema')
+    expect([...sent.messages[0].content.matchAll(/^\d+: /gm)]).toHaveLength(3)
+  })
+
+  it('模型漏掉的句子留原文，不讓整首失敗', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => claudeReply({ lines: [{ i: 0, kana: 'あおいそら', ro: '', zh: '藍天', words: [], note: '' }] })))
+    const res = await worker.fetch(post(`/song/${KEY}`, { title: '空', lyrics: '青い空\n君と歩く' }), env())
+    const body = await res.json()
+    expect(body.song.lines[0].kana).toBe('あおいそら')
+    expect(body.song.lines[1]).toMatchObject({ jp: '君と歩く', kana: '', zh: '' })
+  })
+
+  it('沒同步過的密鑰不給用', async () => {
+    const res = await worker.fetch(post(`/song/${KEY}`, { title: '空', lyrics: LYRICS }), env({ SYNC: fakeKV() }))
+    expect(res.status).toBe(403)
+  })
+
+  it('歌名或歌詞空的、太長的都擋，不打 API', async () => {
+    const spy = vi.fn()
+    vi.stubGlobal('fetch', spy)
+    const tooMany = Array.from({ length: 61 }, (_, i) => `歌詞${i}`).join('\n')
+    for (const body of [{ title: '', lyrics: LYRICS }, { title: '空', lyrics: '  ' }, { title: '空', lyrics: tooMany }, { title: '空', lyrics: 'あ'.repeat(4001) }]) {
+      expect((await worker.fetch(post(`/song/${KEY}`, body), env())).status).toBe(400)
+    }
+    expect(spy).not.toHaveBeenCalled()
+  })
+
+  it('每組密鑰每天 3 首，用完回 429', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (_url, init) => songReply(init)))
+    const e = env()
+    await e.SYNC.put(`song:${KEY}:${day()}`, '3')
+    const res = await worker.fetch(post(`/song/${KEY}`, { title: '空', lyrics: LYRICS }), e)
+    expect(res.status).toBe(429)
+  })
+
+  it('一首歌在全站額度裡算 15 次批改；不夠就 503，不打 API', async () => {
+    const spy = vi.fn(async (_url, init) => songReply(init))
+    vi.stubGlobal('fetch', spy)
+    const e = env()
+    await e.SYNC.put(`grade-all:${day()}`, '190')
+    const res = await worker.fetch(post(`/song/${KEY}`, { title: '空', lyrics: LYRICS }), e)
+    expect(res.status).toBe(503)
+    expect(spy).not.toHaveBeenCalled()
+
+    await e.SYNC.put(`grade-all:${day()}`, '100')
+    expect((await worker.fetch(post(`/song/${KEY}`, { title: '空', lyrics: LYRICS }), e)).status).toBe(200)
+    expect(await e.SYNC.get(`grade-all:${day()}`)).toBe('115')
+  })
+
+  it('上游失敗不算次數，也不把上游訊息吐回去', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: { message: 'credit balance too low' } }), { status: 400 })))
+    const e = env()
+    const res = await worker.fetch(post(`/song/${KEY}`, { title: '空', lyrics: LYRICS }), e)
+    expect(res.status).toBe(502)
+    expect(await res.text()).not.toContain('credit')
+    expect(await e.SYNC.get(`song:${KEY}:${day()}`)).toBeNull()
+  })
+
+  it('分析到一半被截斷就說清楚', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => claudeReply({ lines: [] }, { stop_reason: 'max_tokens' })))
+    const res = await worker.fetch(post(`/song/${KEY}`, { title: '空', lyrics: LYRICS }), env())
+    expect(res.status).toBe(422)
+    expect((await res.json()).error).toContain('太長')
+  })
+})

@@ -224,6 +224,10 @@ API key 放在那裡，沒有上限就是把錢包交出去。四道關卡：
    要改上限：Cloudflare 後台 → Worker → Settings → Variables，加 `GRADE_GLOBAL_DAILY`
    （數字；0 是暫停批改），不用改程式
 
+歌詞分析（`POST /song/<key>`）用同一套關卡：每組密鑰每天 3 首（`song:<密鑰>:<日期>`），
+一首在全站額度裡算 15 次批改（一首約 US$0.04，大約是批改一次的 15 倍）。重複的副歌只送一次。
+歌詞不會存在 Worker，分析完回給 App，存在使用者自己的同步資料裡。
+
 最後一道保險在 Anthropic Console：替這把 API key 所在的 workspace 設每月花費上限。
 就算程式哪裡出錯，也不會超過這個數字。
 

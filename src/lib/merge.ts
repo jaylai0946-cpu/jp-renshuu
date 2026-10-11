@@ -1,4 +1,4 @@
-import type { AppState, DayHist, Progress } from '../types'
+import type { Song, AppState, DayHist, Progress } from '../types'
 import { emptyHist } from './srs'
 
 /**
@@ -21,7 +21,31 @@ export function mergeStates(local: AppState, remote: AppState): AppState {
     hist: mergeHist(local.hist, remote.hist),
     settings: { ...local.settings },
     newDay: mergeNewDay(local.newDay, remote.newDay),
+    songs: mergeSongs(local.songs, remote.songs),
   }
+}
+
+/**
+ * 歌曲：兩邊的聯集。同一首兩邊都有時：任一邊刪了就是刪了（墓碑贏），
+ * 否則取比較新改的那份，「會了」的詞兩邊合起來。
+ */
+function mergeSongs(a: Song[], b: Song[]): Song[] {
+  const byId = new Map<string, Song>()
+  for (const s of a) byId.set(s.id, s)
+  for (const theirs of b) {
+    const mine = byId.get(theirs.id)
+    if (!mine) {
+      byId.set(theirs.id, theirs)
+      continue
+    }
+    if (mine.deleted || theirs.deleted) {
+      byId.set(theirs.id, mine.deleted ? mine : theirs)
+      continue
+    }
+    const newer = theirs.updated > mine.updated ? theirs : mine
+    byId.set(theirs.id, { ...newer, known: [...new Set([...mine.known, ...theirs.known])] })
+  }
+  return [...byId.values()]
 }
 
 function mergeProgress(

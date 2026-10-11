@@ -13,6 +13,7 @@ export function emptyState(): AppState {
     hist: {},
     settings: { ...DEFAULT_SETTINGS },
     newDay: { d: '', n: 0 },
+    songs: [],
   }
 }
 
@@ -21,7 +22,8 @@ export function isPristine(state: AppState): boolean {
   return (
     Object.keys(state.items).length === 0 &&
     Object.keys(state.write).length === 0 &&
-    Object.keys(state.hist).length === 0
+    Object.keys(state.hist).length === 0 &&
+    state.songs.length === 0
   )
 }
 

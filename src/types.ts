@@ -72,6 +72,50 @@ export interface Settings {
   theme: Theme
 }
 
+/** 歌詞裡一個值得學的詞 */
+export interface SongWord {
+  /** 歌詞裡出現的樣子 */
+  s: string
+  /** 讀音（平假名） */
+  k: string
+  /** 辭書形。跟 s 一樣就是空字串 */
+  b: string
+  /** 在這句裡的意思 */
+  zh: string
+}
+
+/** 歌詞的一句，連同 AI 分析的結果 */
+export interface SongLine {
+  jp: string
+  kana: string
+  ro: string
+  zh: string
+  words: SongWord[]
+  /** 文法或歌詞特有用法的說明，沒有就是空字串 */
+  note: string
+}
+
+/**
+ * 使用者自己貼進來的一首歌。
+ *
+ * 歌詞有版權，App 不內建任何歌；這裡只存使用者自己貼的、給自己學的內容，
+ * 跟著他的帳號同步，不會分享給別人。
+ */
+export interface Song {
+  id: string
+  title: string
+  artist: string
+  /** YouTube 影片 id，沒有就是空字串 */
+  video: string
+  lines: SongLine[]
+  /** 標成「會了」的詞，key 是 `${s}|${k}` */
+  known: string[]
+  /** 最後修改時間（ISO），兩台都改過同一首時取新的 */
+  updated: string
+  /** 刪掉的歌留個墓碑，不然同步時另一台會把它加回來 */
+  deleted?: true
+}
+
 export interface AppState {
   /** schema 版本，migration 用 */
   version: number
@@ -84,4 +128,6 @@ export interface AppState {
   settings: Settings
   /** 今天已經學了幾個新字。換日就歸零 */
   newDay: { d: string; n: number }
+  /** 從日文歌學的歌，使用者自己貼的歌詞 */
+  songs: Song[]
 }

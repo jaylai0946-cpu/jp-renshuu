@@ -6,11 +6,21 @@ import { Home } from './components/Home'
 import { Login } from './components/Login'
 import { Nav, type TabId } from './components/Nav'
 import { Round } from './components/Round'
+import { Songs } from './components/Songs'
 import { Stats } from './components/Stats'
 import { Summary } from './components/Summary'
 import { Units } from './components/Units'
 import { UNIT_BY_ID } from './data/units'
-import { answerWriting, applyProgressPatch, recordGrade, setSetting } from './lib/actions'
+import {
+  addSong,
+  answerWriting,
+  applyProgressPatch,
+  recordGrade,
+  recordSongAnswer,
+  removeSong,
+  setSetting,
+  toggleSongWord,
+} from './lib/actions'
 import { ymd } from './lib/dates'
 import { vibrate } from './lib/haptics'
 import { markKnownPatch, nextNew, streak, todayCounts } from './lib/srs'
@@ -273,6 +283,17 @@ export default function App() {
           <Compose
             config={sync.config}
             onGraded={() => setState((s) => recordGrade(s, ymd()))}
+          />
+        ) : null}
+
+        {view === 'songs' ? (
+          <Songs
+            state={state}
+            config={sync.config}
+            onAdd={(song) => setState((s) => addSong(s, song))}
+            onRemove={(id) => setState((s) => removeSong(s, id, new Date().toISOString()))}
+            onToggleWord={(id, key) => setState((s) => toggleSongWord(s, id, key, new Date().toISOString()))}
+            onAnswer={(ok) => setState((s) => recordSongAnswer(s, ok, ymd()))}
           />
         ) : null}
 

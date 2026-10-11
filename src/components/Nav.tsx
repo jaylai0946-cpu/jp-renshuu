@@ -1,10 +1,11 @@
-export type TabId = 'home' | 'units' | 'write' | 'compose' | 'stats'
+export type TabId = 'home' | 'units' | 'write' | 'compose' | 'songs' | 'stats'
 
 const TABS: { id: TabId; glyph: string; label: string }[] = [
   { id: 'home', glyph: '今', label: '今日' },
   { id: 'units', glyph: '単', label: '單元' },
   { id: 'write', glyph: '筆', label: '手寫' },
   { id: 'compose', glyph: '文', label: '造句' },
+  { id: 'songs', glyph: '歌', label: '歌曲' },
   { id: 'stats', glyph: '録', label: '紀錄' },
 ]
 

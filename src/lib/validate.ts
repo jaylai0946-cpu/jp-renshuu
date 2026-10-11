@@ -1,6 +1,6 @@
 import { DEFAULT_SETTINGS, SCHEMA_VERSION } from '../constants'
 import { ITEMS } from '../data/units'
-import type { AppState, DayHist, Progress, Settings } from '../types'
+import type { AppState, DayHist, Progress, Settings, Song, SongLine, SongWord } from '../types'
 import { isDayString } from './dates'
 
 export type ValidationResult = { ok: true; state: AppState } | { ok: false; error: string }
@@ -86,6 +86,93 @@ export function validateAppState(raw: unknown, today: string): ValidationResult 
         d: isDayString(newDayRaw.d) ? newDayRaw.d : '',
         n: int(newDayRaw.n, 0, 0, 999),
       },
+      songs: songList(raw.songs),
     },
   }
+}
+
+// ---- 歌曲 ----
+// 歌詞是使用者貼的、分析結果是 AI 給的，兩邊都不信：每個字串都截長度，
+// 陣列都限數量，免得一份壞掉的資料把同步的容量塞爆。
+
+export const SONG_LIMITS = { songs: 30, lines: 120, words: 12, text: 300, note: 400, known: 1000 }
+
+function str(v: unknown, max: number): string {
+  return typeof v === 'string' ? v.slice(0, max) : ''
+}
+
+function songWord(raw: unknown): SongWord | null {
+  if (!isRecord(raw)) return null
+  const s = str(raw.s, 60).trim()
+  if (!s) return null
+  return { s, k: str(raw.k, 80), b: str(raw.b, 60), zh: str(raw.zh, 80) }
+}
+
+function songLine(raw: unknown): SongLine | null {
+  if (!isRecord(raw)) return null
+  const jp = str(raw.jp, SONG_LIMITS.text).trim()
+  if (!jp) return null
+  const words = Array.isArray(raw.words)
+    ? raw.words.map(songWord).filter((w): w is SongWord => w !== null).slice(0, SONG_LIMITS.words)
+    : []
+  return {
+    jp,
+    kana: str(raw.kana, SONG_LIMITS.text),
+    ro: str(raw.ro, SONG_LIMITS.text),
+    zh: str(raw.zh, SONG_LIMITS.text),
+    words,
+    note: str(raw.note, SONG_LIMITS.note),
+  }
+}
+
+/** 一首歌的檢查，存進 state 前（含 AI 剛回來的分析結果）都要過這關 */
+export function validSong(raw: unknown): Song | null {
+  return song(raw)
+}
+
+function song(raw: unknown): Song | null {
+  if (!isRecord(raw)) return null
+  const id = str(raw.id, 40)
+  if (!/^[a-z0-9-]{4,40}$/.test(id)) return null
+  const updated = str(raw.updated, 40)
+  if (raw.deleted === true) {
+    // 墓碑只留 id 和時間，內容不用再帶著同步
+    return { id, title: '', artist: '', video: '', lines: [], known: [], updated, deleted: true }
+  }
+  const lines = Array.isArray(raw.lines)
+    ? raw.lines.map(songLine).filter((l): l is SongLine => l !== null).slice(0, SONG_LIMITS.lines)
+    : []
+  const title = str(raw.title, 100).trim()
+  if (!title || !lines.length) return null
+  const video = str(raw.video, 20)
+  return {
+    id,
+    title,
+    artist: str(raw.artist, 100).trim(),
+    video: /^[\w-]{6,20}$/.test(video) ? video : '',
+    lines,
+    known: Array.isArray(raw.known)
+      ? [...new Set(raw.known.filter((k): k is string => typeof k === 'string' && k.length <= 150))].slice(
+          0,
+          SONG_LIMITS.known,
+        )
+      : [],
+    updated,
+  }
+}
+
+function songList(raw: unknown): Song[] {
+  if (!Array.isArray(raw)) return []
+  const seen = new Set<string>()
+  const out: Song[] = []
+  for (const r of raw) {
+    const s = song(r)
+    if (!s || seen.has(s.id)) continue
+    seen.add(s.id)
+    out.push(s)
+  }
+  // 墓碑不佔「最多 30 首」的名額，但也不無限累積
+  const alive = out.filter((s) => !s.deleted).slice(0, SONG_LIMITS.songs)
+  const graves = out.filter((s) => s.deleted).slice(0, 100)
+  return [...alive, ...graves]
 }

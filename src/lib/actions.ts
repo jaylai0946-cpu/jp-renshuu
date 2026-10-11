@@ -1,4 +1,4 @@
-import type { AppState, Progress } from '../types'
+import type { AppState, Progress, Song } from '../types'
 import { emptyHist, newProgress, schedule } from './srs'
 
 /**
@@ -101,4 +101,40 @@ export function setSetting<K extends keyof AppState['settings']>(
   value: AppState['settings'][K],
 ): AppState {
   return { ...state, settings: { ...state.settings, [key]: value } }
+}
+
+// ---- 歌曲 ----
+
+/** 新增一首分析好的歌，放在最前面 */
+export function addSong(state: AppState, song: Song): AppState {
+  return { ...state, songs: [song, ...state.songs.filter((s) => s.id !== song.id)] }
+}
+
+/** 刪掉一首歌。留下墓碑，另一台同步時才知道它被刪了，不會又加回來 */
+export function removeSong(state: AppState, id: string, now: string): AppState {
+  return {
+    ...state,
+    songs: state.songs.map((s) =>
+      s.id === id
+        ? { id, title: '', artist: '', video: '', lines: [], known: [], updated: now, deleted: true as const }
+        : s,
+    ),
+  }
+}
+
+/** 把一個詞標成「會了」或取消 */
+export function toggleSongWord(state: AppState, id: string, key: string, now: string): AppState {
+  return {
+    ...state,
+    songs: state.songs.map((s) => {
+      if (s.id !== id || s.deleted) return s
+      const known = s.known.includes(key) ? s.known.filter((k) => k !== key) : [...s.known, key]
+      return { ...s, known, updated: now }
+    }),
+  }
+}
+
+/** 歌曲練習答了一題。不排間隔複習，但算進今天的答題數、點數和連續天數 */
+export function recordSongAnswer(state: AppState, ok: boolean, today: string): AppState {
+  return bumpHist(state, today, { n: 1, c: ok ? 1 : 0, xp: ok ? XP_FIRST_CORRECT : 0 })
 }
