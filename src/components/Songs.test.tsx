@@ -81,11 +81,13 @@ describe('歌曲', () => {
     })
   }
 
+  const firstLine = () => document.querySelector<HTMLButtonElement>('.lyric-text')!
+
   it('貼歌詞 → 分析 → 逐句顯示，存進進度', async () => {
     await addSong()
 
     expect(songCalls).toEqual([{ title: '空の歌', artist: '某歌手', lyrics: '青い空を見上げて\n君と歩いた道' }])
-    expect(screen.getByText('青い空を見上げて')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '唸「青い空を見上げて」' })).toBeInTheDocument()
     expect(screen.getByText('抬頭望著藍天')).toBeInTheDocument()
     expect(screen.getByTitle('空の歌 的影片')).toHaveAttribute(
       'src',
@@ -99,14 +101,46 @@ describe('歌曲', () => {
 
   it('點一句看單字和文法；點單字標成會了', async () => {
     await addSong()
-    fireEvent.click(screen.getByText('青い空を見上げて'))
+    fireEvent.click(firstLine())
     expect(screen.getByText('「見上げて」是て形，表示接著做下一個動作。')).toBeInTheDocument()
 
-    const word = screen.getByRole('button', { name: /見上げて.*抬頭看/ })
+    const word = screen.getByRole('button', { name: /^見上げて.*抬頭看/ })
     fireEvent.click(word)
     expect(word).toHaveAttribute('aria-pressed', 'true')
     const saved: AppState = JSON.parse(localStorage.getItem(STORAGE_KEY)!)
     expect(saved.songs[0].known).toEqual(['見上げて|みあげて'])
+  })
+
+  it('單字對照：每個詞底下標中文，可以關掉', async () => {
+    await addSong()
+    const line = document.querySelector('.lyric .gloss')!
+    const marked = [...line.querySelectorAll('.g.w')].map((el) => [
+      el.querySelector('.gw')!.textContent,
+      el.querySelector('.gz')!.textContent,
+    ])
+    expect(marked).toEqual([
+      ['青い', '藍色的'],
+      ['空', '天空'],
+      ['見上げて', '抬頭看'],
+    ])
+    expect(line.textContent?.replace(/藍色的|天空|抬頭看/g, '')).toBe('青い空を見上げて')
+
+    fireEvent.click(screen.getByRole('button', { name: '單字對照' }))
+    expect(document.querySelector('.lyric .gloss')).toBeNull()
+  })
+
+  it('重新分析：同一份歌詞再送一次，影片和會了的詞留著', async () => {
+    await addSong()
+    fireEvent.click(firstLine())
+    fireEvent.click(screen.getByRole('button', { name: /^見上げて.*抬頭看/ }))
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '重新分析' }))
+    })
+    expect(songCalls).toHaveLength(2)
+    expect(songCalls[1]).toEqual({ title: '空の歌', artist: '某歌手', lyrics: '青い空を見上げて\n君と歩いた道' })
+    const saved: AppState = JSON.parse(localStorage.getItem(STORAGE_KEY)!)
+    expect(saved.songs.filter((x) => !x.deleted)).toHaveLength(1)
+    expect(saved.songs[0]).toMatchObject({ video: 'dQw4w9WgXcQ', known: ['見上げて|みあげて'] })
   })
 
   it('把中文關掉可以先自己猜', async () => {

@@ -100,7 +100,7 @@ const SONG_SCHEMA = {
           i: { type: 'integer', description: '對應輸入的行號' },
           kana: { type: 'string', description: '整句的讀音，平假名（外來語可用片假名）' },
           ro: { type: 'string', description: '整句的赫本式羅馬拼音' },
-          zh: { type: 'string', description: '台灣繁體中文翻譯，自然的意譯' },
+          zh: { type: 'string', description: '台灣繁體中文意譯，讀起來像中文歌詞，不是逐字翻' },
           words: {
             type: 'array',
             items: {
@@ -109,7 +109,7 @@ const SONG_SCHEMA = {
                 s: { type: 'string', description: '在歌詞裡出現的樣子' },
                 k: { type: 'string', description: '讀音，平假名' },
                 b: { type: 'string', description: '辭書形；和 s 一樣就給空字串' },
-                zh: { type: 'string', description: '在這句裡的意思，簡短的繁體中文' },
+                zh: { type: 'string', description: '在這句裡的意思，2 到 6 個字的繁體中文' },
               },
               required: ['s', 'k', 'b', 'zh'],
               additionalProperties: false,
@@ -135,9 +135,12 @@ function songPrompt(title, artist, lines) {
     '\n\n逐行分析，每一個編號都要回一筆，i 填那一行的編號，不要漏、不要合併：\n' +
     '- kana：整句讀音。漢字標成平假名，助詞は／へ照實際讀音寫成 わ／え\n' +
     '- ro：整句的赫本式羅馬拼音\n' +
-    '- zh：自然的台灣繁體中文翻譯\n' +
-    '- words：這句裡值得學的詞（名詞、動詞、形容詞、副詞、常見句型），助詞和太簡單的詞不用列，' +
-    '一句最多 6 個。s 要和歌詞裡的寫法一字不差\n' +
+    '- zh：像台灣的中文歌詞那樣意譯。先讀完整首、搭配前後句理解意思，' +
+    '保留原本的畫面、比喻和語氣，句子要通順好唸；不要逐字硬翻、不要翻譯腔' +
+    '（例如「我是」「…的事情」「…著的」這類生硬句型），也不要在翻譯裡加解釋\n' +
+    '- words：把這句拆成詞，依在歌詞裡出現的順序，列出所有實詞（名詞、動詞、形容詞、副詞、慣用說法），' +
+    '單獨的助詞、です／ます不用列，一句最多 10 個。s 要和歌詞裡的寫法一字不差（照歌詞裡的活用形，' +
+    '辭書形放 b），zh 寫這個詞在這句裡的意思\n' +
     '- note：這句有值得一提的文法、口語縮約或歌詞特有的寫法時，用一兩句說明；沒有就空字串'
   )
 }
@@ -364,7 +367,7 @@ async function handleSong(request, env, key) {
       headers: claudeHeaders(env),
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 16000,
+        max_tokens: 32000,
         messages: [{ role: 'user', content: songPrompt(title, artist, unique) }],
         output_config: { format: { type: 'json_schema', schema: SONG_SCHEMA } },
       }),

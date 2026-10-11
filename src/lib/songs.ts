@@ -47,6 +47,49 @@ export function wordKey(w: SongWord): string {
   return `${w.s}|${w.k}`
 }
 
+/** 歌詞切成一段一段：標過的詞帶著 word，其他的字一個一個放（排版時才能在任何地方換行） */
+export interface GlossSeg {
+  text: string
+  word?: SongWord
+}
+
+/**
+ * 把一句歌詞依分析出來的詞切開，用來在每個詞底下標中文。
+ *
+ * 模型給的詞不一定照順序、也可能重複或對不上原文，所以一個一個去原文找
+ * 還沒被佔走的位置，找不到的就不標（底下的單字卡還是看得到）。
+ */
+export function glossSegments(jp: string, words: SongWord[]): GlossSeg[] {
+  const taken: { start: number; end: number; word: SongWord }[] = []
+  for (const word of words) {
+    if (!word.s) continue
+    for (let from = 0; ; ) {
+      const start = jp.indexOf(word.s, from)
+      if (start < 0) break
+      const end = start + word.s.length
+      if (taken.every((t) => end <= t.start || start >= t.end)) {
+        taken.push({ start, end, word })
+        break
+      }
+      from = start + 1
+    }
+  }
+  taken.sort((a, b) => a.start - b.start)
+
+  const segs: GlossSeg[] = []
+  let at = 0
+  const plain = (to: number) => {
+    for (const ch of jp.slice(at, to)) segs.push({ text: ch })
+  }
+  for (const t of taken) {
+    plain(t.start)
+    segs.push({ text: jp.slice(t.start, t.end), word: t.word })
+    at = t.end
+  }
+  plain(jp.length)
+  return segs
+}
+
 export type AnalyzeResponse =
   | { status: 'ok'; title: string; artist: string; lines: SongLine[] }
   | { status: 'error'; message: string }

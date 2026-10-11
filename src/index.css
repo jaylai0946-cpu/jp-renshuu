@@ -1862,6 +1862,35 @@ textarea {
   font-weight: 700;
   line-height: 1.45;
 }
+/* 單字對照：每個詞底下標中文，其他字照常排，任何地方都能換行 */
+.lyric-text .gloss {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  row-gap: 4px;
+}
+.gloss .g {
+  white-space: pre;
+}
+.gloss .g.w {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 0 1px;
+}
+.gloss .gw {
+  border-bottom: 2px solid var(--blue-text);
+  line-height: 1.3;
+}
+.gloss .gz {
+  font-family: var(--ui);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--blue-text);
+  white-space: nowrap;
+  margin-top: 1px;
+}
 .lyric-text .kana {
   font-family: var(--jp);
   font-size: 14px;

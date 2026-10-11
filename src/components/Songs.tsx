@@ -6,6 +6,7 @@ import {
   SONG_MAX_LINES,
   analyzeSong,
   buildSongQuiz,
+  glossSegments,
   newSongId,
   parseYouTubeId,
   songWords,
@@ -72,6 +73,8 @@ export function Songs({ state, config, onAdd, onRemove, onToggleWord, onAnswer }
       <SongView
         song={current}
         romaji={state.settings.romaji}
+        config={config}
+        onReanalysed={onAdd}
         onBack={() => go({ kind: 'list' })}
         onQuiz={() => go({ kind: 'quiz', id: current.id })}
         onToggleWord={(key) => onToggleWord(current.id, key)}
@@ -268,6 +271,8 @@ function AddSong({
 function SongView({
   song,
   romaji,
+  config,
+  onReanalysed,
   onBack,
   onQuiz,
   onToggleWord,
@@ -275,6 +280,8 @@ function SongView({
 }: {
   song: Song
   romaji: boolean
+  config: SyncConfig | null
+  onReanalysed: (song: Song) => void
   onBack: () => void
   onQuiz: () => void
   onToggleWord: (key: string) => void
@@ -283,6 +290,9 @@ function SongView({
   const [showKana, setShowKana] = useState(true)
   const [showZh, setShowZh] = useState(true)
   const [showRo, setShowRo] = useState(romaji)
+  const [showGloss, setShowGloss] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
   const [open, setOpen] = useState<Set<number>>(() => new Set())
   const known = new Set(song.known)
   const canQuiz = songWords(song).length >= MIN_QUIZ_WORDS
@@ -294,6 +304,24 @@ function SongView({
       else next.add(i)
       return next
     })
+  }
+
+  /** 用同一份歌詞再分析一次（翻譯或單字不滿意時）。影片和標成會了的詞留著 */
+  async function reanalyse() {
+    if (!config || busy) return
+    if (!window.confirm('用同一份歌詞重新分析一次？會用掉今天 1 次分析額度（每天 3 首）。')) return
+    setError('')
+    setBusy(true)
+    const res = await analyzeSong(config, {
+      title: song.title,
+      artist: song.artist,
+      lyrics: song.lines.map((l) => l.jp).join('\n'),
+    })
+    setBusy(false)
+    if (res.status === 'error') return setError(res.message)
+    const next = validSong({ ...song, lines: res.lines, updated: new Date().toISOString() })
+    if (!next) return setError('分析結果讀不懂，再試一次')
+    onReanalysed(next)
   }
 
   return (
@@ -328,6 +356,9 @@ function SongView({
         <button type="button" className={`chip${showKana ? ' on ink' : ''}`} aria-pressed={showKana} onClick={() => setShowKana((v) => !v)}>
           讀音
         </button>
+        <button type="button" className={`chip${showGloss ? ' on ink' : ''}`} aria-pressed={showGloss} onClick={() => setShowGloss((v) => !v)}>
+          單字對照
+        </button>
         <button type="button" className={`chip${showZh ? ' on ink' : ''}`} aria-pressed={showZh} onClick={() => setShowZh((v) => !v)}>
           中文
         </button>
@@ -351,9 +382,28 @@ function SongView({
                   aria-expanded={expanded}
                   onClick={() => toggleLine(i)}
                 >
-                  <span className="jp" lang="ja">
-                    {line.jp}
-                  </span>
+                  {showGloss && line.words.length ? (
+                    <span className="jp gloss" lang="ja">
+                      {glossSegments(line.jp, line.words).map((seg, j) =>
+                        seg.word ? (
+                          <span key={j} className="g w">
+                            <span className="gw">{seg.text}</span>
+                            <span className="gz" lang="zh-Hant">
+                              {seg.word.zh}
+                            </span>
+                          </span>
+                        ) : (
+                          <span key={j} className="g">
+                            {seg.text}
+                          </span>
+                        ),
+                      )}
+                    </span>
+                  ) : (
+                    <span className="jp" lang="ja">
+                      {line.jp}
+                    </span>
+                  )}
                   {showKana && line.kana && line.kana !== line.jp ? (
                     <span className="kana" lang="ja">
                       {line.kana}
@@ -416,7 +466,17 @@ function SongView({
         })}
       </ol>
 
+      {error ? (
+        <p className="err" role="alert">
+          {error}
+        </p>
+      ) : null}
       <div className="foot-links">
+        {config ? (
+          <button type="button" className="link" onClick={reanalyse} disabled={busy}>
+            {busy ? '重新分析中…（約 30–60 秒）' : '重新分析'}
+          </button>
+        ) : null}
         <button type="button" className="link danger" onClick={onRemove}>
           刪掉這首歌
         </button>

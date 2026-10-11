@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { mergeStates } from './merge'
-import { buildSongQuiz, parseYouTubeId, songWords, uniqueLineCount, wordKey } from './songs'
+import { buildSongQuiz, glossSegments, parseYouTubeId, songWords, uniqueLineCount, wordKey } from './songs'
 import { emptyState } from './storage'
 import { validSong, validateAppState } from './validate'
 import type { Song, SongLine } from '../types'
@@ -125,5 +125,27 @@ describe('驗證和同步', () => {
     const a = { ...emptyState(), songs: [{ ...SONG, known: ['空|そら'] }] }
     const b = { ...emptyState(), songs: [{ ...SONG, known: ['夢|ゆめ'], updated: '2026-10-12T00:00:00.000Z' }] }
     expect(mergeStates(a, b).songs[0].known.sort()).toEqual(['夢|ゆめ', '空|そら'])
+  })
+})
+
+describe('glossSegments', () => {
+  const w = (s: string, zh = s) => ({ s, k: '', b: '', zh })
+
+  it('詞照原文位置切開，其他字一個一個放，拼回去就是原句', () => {
+    const segs = glossSegments('青い空を見上げて', [w('見上げて', '抬頭看'), w('青い'), w('空')])
+    expect(segs.map((x) => x.text)).toEqual(['青い', '空', 'を', '見上げて'])
+    expect(segs[3].word?.zh).toBe('抬頭看')
+    expect(segs[2].word).toBeUndefined()
+  })
+
+  it('同一個詞出現兩次，兩次都標得到', () => {
+    const segs = glossSegments('君と君', [w('君'), w('君')])
+    expect(segs.filter((x) => x.word).map((x) => x.text)).toEqual(['君', '君'])
+  })
+
+  it('對不上原文、重疊的詞就不標，不會切壞句子', () => {
+    const segs = glossSegments('夜になった', [w('夜に'), w('になる'), w('に'), w('なった')])
+    expect(segs.map((x) => x.text).join('')).toBe('夜になった')
+    expect(segs.filter((x) => x.word).map((x) => x.text)).toEqual(['夜に', 'なった'])
   })
 })
