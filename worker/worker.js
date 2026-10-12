@@ -208,15 +208,25 @@ async function upstreamError(upstream, what) {
   let error
   if (s === 429) error = `${what}服務忙碌中，等一分鐘再按`
   else if (billing) error = `${what}暫停：API 額度不足，請管理員到 Anthropic Console 確認額度`
-  else if (s === 401 || s === 403) error = `${what}暫停：伺服器的 API key 不對，請管理員重新設定 ANTHROPIC_API_KEY`
-  else if (s === 404) error = `${what}暫停：找不到模型，請管理員檢查 Worker 設定`
-  else if (s >= 500) error = `${what}服務暫時有問題，等幾分鐘再試`
   else {
-    // 其他 400 多半是請求格式的問題，原文對管理員最有用；帳務類上面已經分出去了
+    if (s === 401 || s === 403) error = `${what}暫停：伺服器的 API key 不對或沒權限，請管理員檢查 ANTHROPIC_API_KEY`
+    else if (s === 404) error = `${what}暫停：找不到模型，請管理員檢查 Worker 設定`
+    else if (s >= 500) error = `${what}服務暫時有問題，等幾分鐘再試`
+    else error = `${what}沒有完成，再試一次`
+    // 原文對管理員最有用（帳務類上面已經分出去了）；萬一裡面有 key 就遮掉
     const detail = message.replace(/sk-ant-[\w-]+/g, '***').slice(0, 160)
-    error = `${what}沒有完成，再試一次` + (detail ? `。原因：${detail}` : '')
+    if (detail) error += `。原因：${detail}`
   }
   return json({ error: `${error}（代碼 ${s}）` }, s === 429 ? 429 : 502)
+}
+
+/**
+ * 這組密鑰同步過進度沒。有的話快取一小時省讀取；
+ * 沒有的話再讀一次不帶長快取的——剛註冊的人第一次同步後馬上用，不該被舊的「沒有」擋一小時。
+ */
+async function hasSynced(env, key) {
+  if (await env.SYNC.get(`state:${key}`, { type: 'text', cacheTtl: 3600 })) return true
+  return Boolean(await env.SYNC.get(`state:${key}`, { type: 'text' }))
 }
 
 async function handleGrade(request, env, key) {
@@ -232,8 +242,7 @@ async function handleGrade(request, env, key) {
    * 才代表是這個 App 的使用者。光靠格式的話，隨機猜雖然猜不中，
    * 但也擋不住「拿自己編的密鑰來白嫖 API」。
    */
-  const hasState = await env.SYNC.get(`state:${key}`, { type: 'text', cacheTtl: 3600 })
-  if (!hasState) {
+  if (!(await hasSynced(env, key))) {
     return json({ error: '這組密鑰還沒同步過進度。先在 App 裡啟用同步並練一回合' }, 403)
   }
 
@@ -326,8 +335,7 @@ async function handleSong(request, env, key) {
   }
 
   // 跟批改一樣：要先同步過，才代表是這個 App 的使用者
-  const hasState = await env.SYNC.get(`state:${key}`, { type: 'text', cacheTtl: 3600 })
-  if (!hasState) {
+  if (!(await hasSynced(env, key))) {
     return json({ error: '這組密鑰還沒同步過進度。先在 App 裡啟用同步並練一回合' }, 403)
   }
 

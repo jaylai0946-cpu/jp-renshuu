@@ -209,12 +209,20 @@ describe('/grade', () => {
     expect(await res.text()).not.toContain('credit')
   })
 
+  it('額度不足只說額度不足，不把帳務原文吐回去', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+    const body = { error: { type: 'invalid_request_error', message: 'Your credit balance is too low' } }
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(body), { status: 400 })))
+    const { error } = await (await worker.fetch(post(`/grade/${KEY}`, { prompt: 'a', answer: 'b' }), env())).json()
+    expect(error).toContain('額度不足')
+    expect(error).not.toContain('credit')
+  })
+
   it('上游錯誤說得出是哪一類，管理員才知道要修什麼', async () => {
     vi.spyOn(console, 'log').mockImplementation(() => {})
     const cases = [
       [401, { error: { type: 'authentication_error', message: 'invalid x-api-key' } }, 'API key'],
-      [400, { error: { type: 'invalid_request_error', message: 'Your credit balance is too low' } }, '額度不足'],
-      [404, { error: { type: 'not_found_error', message: 'model' } }, '找不到模型'],
+            [404, { error: { type: 'not_found_error', message: 'model' } }, '找不到模型'],
       [529, { error: { type: 'overloaded_error', message: 'Overloaded' } }, '暫時有問題'],
     ]
     for (const [status, body, text] of cases) {
@@ -224,7 +232,7 @@ describe('/grade', () => {
       expect(res.status, String(status)).toBe(502)
       expect(error).toContain(text)
       expect(error).toContain(`代碼 ${status}`)
-      expect(error).not.toContain('x-api-key')
+      expect(error).toContain(`原因：${body.error.message}`)
     }
   })
 
