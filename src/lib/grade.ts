@@ -84,7 +84,7 @@ export async function grade(
 }
 
 export const GRADE_LABEL: Record<GradeVerdict, { mark: string; text: string }> = {
-  correct: { mark: '合格', text: '完全正確' },
-  minor: { mark: '惜', text: '意思對了，小地方可以更好' },
-  wrong: { mark: '直', text: '這句需要修改' },
+  correct: { mark: '全對', text: '完全正確' },
+  minor: { mark: '差一點', text: '意思對了，小地方可以更好' },
+  wrong: { mark: '要修改', text: '這句需要修改' },
 }
