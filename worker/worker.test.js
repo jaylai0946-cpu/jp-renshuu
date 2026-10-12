@@ -236,6 +236,17 @@ describe('/grade', () => {
     }
   })
 
+  it('403 Request not allowed 說是地區問題、附上機房代碼', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+    const body = { error: { type: 'permission_error', message: 'Request not allowed' } }
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(body), { status: 403 })))
+    const req = post(`/grade/${KEY}`, { prompt: 'a', answer: 'b' })
+    Object.defineProperty(req, 'cf', { value: { colo: 'HKG' } })
+    const { error } = await (await worker.fetch(req, env())).json()
+    expect(error).toContain('不支援的地區')
+    expect(error).toContain('機房 HKG')
+  })
+
   it('其他 400 把原因帶回來給管理員看，但遮掉 key', async () => {
     vi.spyOn(console, 'log').mockImplementation(() => {})
     const body = { error: { type: 'invalid_request_error', message: 'output_config.format: bad schema (key sk-ant-api03-abc_DEF)' } }

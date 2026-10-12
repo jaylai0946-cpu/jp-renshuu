@@ -209,7 +209,7 @@ function utcDay() {
  * 上游的訊息原文不吐回前端（可能有帳務或金鑰相關的內容），只說是哪一類問題，
  * 附上狀態碼方便管理員查。原文寫進 Worker 的 log，在 Cloudflare 後台看得到。
  */
-async function upstreamError(upstream, what) {
+async function upstreamError(upstream, what, colo = '') {
   let type = ''
   let message = ''
   try {
@@ -219,7 +219,7 @@ async function upstreamError(upstream, what) {
   } catch {
     // 不是 JSON 就算了
   }
-  console.log(`claude api ${upstream.status} ${type}: ${message.slice(0, 300)}`)
+  console.log(`claude api ${upstream.status} ${type} via ${colo}: ${message.slice(0, 300)}`)
 
   const s = upstream.status
   const billing = s === 402 || type === 'billing_error' || /credit|billing/i.test(message)
@@ -227,13 +227,19 @@ async function upstreamError(upstream, what) {
   if (s === 429) error = `${what}服務忙碌中，等一分鐘再按`
   else if (billing) error = `${what}暫停：API 額度不足，請管理員到 Anthropic Console 確認額度`
   else {
-    if (s === 401 || s === 403) error = `${what}暫停：伺服器的 API key 不對或沒權限，請管理員檢查 ANTHROPIC_API_KEY`
-    else if (s === 404) error = `${what}暫停：找不到模型，請管理員檢查 Worker 設定`
+    if (s === 403 && /not allowed/i.test(message)) {
+      // Worker 在離使用者最近的機房跑。時好時壞多半是連線繞到 Anthropic 不支援的地區（例如香港）的機房；
+      // 錯誤訊息附上機房代碼，才對得出是哪裡
+      error = `${what}這次被擋了，可能是連線繞到不支援的地區，等一下再試`
+    } else if (s === 401 || s === 403) {
+      error = `${what}暫停：伺服器的 API key 不對或沒權限，請管理員檢查 ANTHROPIC_API_KEY`
+    } else if (s === 404) error = `${what}暫停：找不到模型，請管理員檢查 Worker 設定`
     else if (s >= 500) error = `${what}服務暫時有問題，等幾分鐘再試`
     else error = `${what}沒有完成，再試一次`
     // 原文對管理員最有用（帳務類上面已經分出去了）；萬一裡面有 key 就遮掉
     const detail = message.replace(/sk-ant-[\w-]+/g, '***').slice(0, 160)
     if (detail) error += `。原因：${detail}`
+    if (colo) error += `（機房 ${colo}）`
   }
   return json({ error: `${error}（代碼 ${s}）` }, s === 429 ? 429 : 502)
 }
@@ -310,7 +316,7 @@ async function handleGrade(request, env, key) {
     return json({ error: '連不上批改服務，等一下再試' }, 502)
   }
 
-  if (!upstream.ok) return upstreamError(upstream, '批改')
+  if (!upstream.ok) return upstreamError(upstream, '批改', request.cf?.colo)
 
   const data = await upstream.json()
   if (data.stop_reason === 'refusal') {
@@ -421,7 +427,7 @@ async function handleSong(request, env, key) {
     } catch {
       return json({ error: '連不上分析服務，等一下再試' }, 502)
     }
-    if (!upstream.ok) return upstreamError(upstream, '分析')
+    if (!upstream.ok) return upstreamError(upstream, '分析', request.cf?.colo)
 
     const data = await upstream.json()
     if (data.stop_reason === 'refusal') return json({ error: '這首歌沒辦法分析，換一首試試' }, 422)

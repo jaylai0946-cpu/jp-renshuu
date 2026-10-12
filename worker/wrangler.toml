@@ -2,6 +2,12 @@ name = "jp-renshuu-sync"
 main = "worker.js"
 compatibility_date = "2026-08-27"
 
+# Worker 預設在離使用者最近的機房跑。台灣的連線偶爾會走到香港機房，
+# Anthropic 不收那裡來的請求（403 Request not allowed）。指定在美東跑，
+# 打 Claude API 一律從美國出去。用網頁後台部署的話，在 Settings 的 Placement 設定。
+[placement]
+region = "aws:us-east-1"
+
 # 部署前先跑 `npx wrangler kv namespace create SYNC`，把印出來的 id 填進來。
 # 這是日文練習本專用的 namespace，不要跟課表 App 共用同一個 id。
 [[kv_namespaces]]
