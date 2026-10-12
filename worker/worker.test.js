@@ -388,8 +388,31 @@ describe('/song', () => {
     expect([...sent.messages[0].content.matchAll(/^\d+: /gm)]).toHaveLength(3)
   })
 
+  it('長的歌分批送，每批只要它分析那幾句；漏掉的句子再補問一次', async () => {
+    const lyrics = Array.from({ length: 23 }, (_, i) => `歌詞${i}です`).join('\n')
+    const calls = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url, init) => {
+        const prompt = JSON.parse(init.body).messages[0].content
+        calls.push(prompt)
+        const only = prompt.match(/只分析編號 ([\d、]+) 這/)[1].split('、').map(Number)
+        // 第一輪故意每批都漏掉最後一句
+        const answer = calls.length <= 3 ? only.slice(0, -1) : only
+        return claudeReply({ lines: answer.map((i) => ({ i, kana: `k${i}`, ro: '', zh: `z${i}`, words: [], note: '' })) })
+      }),
+    )
+    const res = await worker.fetch(post(`/song/${KEY}`, { title: '長', lyrics }), env())
+    const body = await res.json()
+    expect(calls).toHaveLength(4)
+    expect(calls[0]).toContain('只分析編號 0、1、2、3、4、5、6、7、8、9 這 10 行')
+    expect(calls[0]).toContain('22: 歌詞22です')
+    expect(calls[3]).toContain('只分析編號 9、19、22 這 3 行')
+    expect(body.song.lines.every((l, i) => l.zh === `z${i}`)).toBe(true)
+  })
+
   it('附了中文歌詞就放進 prompt，要模型以那份為主；沒附就自己意譯', async () => {
-    const spy = vi.fn(async () => claudeReply({ lines: [] }))
+    const spy = vi.fn(async () => claudeReply({ lines: [{ i: 0, kana: '', ro: '', zh: '', words: [], note: '' }] }))
     vi.stubGlobal('fetch', spy)
     await worker.fetch(post(`/song/${KEY}`, { title: '空', lyrics: '青い空', zh: '湛藍的天空' }), env())
     const withZh = JSON.parse(spy.mock.calls[0][1].body).messages[0].content

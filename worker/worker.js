@@ -46,6 +46,8 @@ const SONG_DAILY_LIMIT = 3
  * 一首歌大約是一次批改的 15 倍 token（約 US$0.04），用同一個額度管就不用多一個上限
  */
 const SONG_WEIGHT = 15
+/** 一批分析幾句。太多模型會回到一半就收尾 */
+const SONG_BATCH = 10
 /** 不同的句子最多幾句。重複的副歌只算一次 */
 const SONG_MAX_LINES = 60
 const SONG_MAX_CHARS = 4000
@@ -126,7 +128,7 @@ const SONG_SCHEMA = {
   additionalProperties: false,
 }
 
-function songPrompt(title, artist, lines, zh = '') {
+function songPrompt(title, artist, lines, zh = '', only = null) {
   const zhRule = zh
     ? '- zh：學生附了中文歌詞（在下面），以那份為主：找出對應這一行的那句照抄，' +
       '只能修明顯的錯字，不要改寫或潤飾；一句中文對到好幾行日文，就照日文的斷句拆開；' +
@@ -140,7 +142,10 @@ function songPrompt(title, artist, lines, zh = '') {
     `歌名：${title}${artist ? `（${artist}）` : ''}\n\n` +
     lines.map((l, i) => `${i}: ${l}`).join('\n') +
     (zh ? `\n\n學生附的中文歌詞：\n${zh}` : '') +
-    '\n\n逐行分析，每一個編號都要回一筆，i 填那一行的編號，不要漏、不要合併：\n' +
+    (only && only.length < lines.length
+      ? `\n\n這次只分析編號 ${only.join('、')} 這 ${only.length} 行（其他行是上下文，不用回）。` +
+        '每一個指定的編號都要回一筆，i 填那一行的編號，不要漏、不要合併：\n'
+      : '\n\n逐行分析，每一個編號都要回一筆，i 填那一行的編號，不要漏、不要合併：\n') +
     '- kana：整句讀音。漢字標成平假名，助詞は／へ照實際讀音寫成 わ／え\n' +
     '- ro：整句的赫本式羅馬拼音\n' +
     zhRule +
@@ -376,39 +381,67 @@ async function handleSong(request, env, key) {
     return json({ error: `今天分析歌詞的次數用完了（每天 ${SONG_DAILY_LIMIT} 首），明天再來` }, 429)
   }
 
-  let upstream
-  try {
-    upstream = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: claudeHeaders(env),
-      body: JSON.stringify({
-        model: MODEL,
-        max_tokens: 32000,
-        messages: [{ role: 'user', content: songPrompt(title, artist, unique, zh) }],
-        output_config: { format: { type: 'json_schema', schema: SONG_SCHEMA } },
-      }),
-    })
-  } catch {
-    return json({ error: '連不上分析服務，等一下再試' }, 502)
-  }
-  if (!upstream.ok) return upstreamError(upstream, '分析')
-
-  const data = await upstream.json()
-  if (data.stop_reason === 'refusal') return json({ error: '這首歌沒辦法分析，換一首試試' }, 422)
-  if (data.stop_reason === 'max_tokens') return json({ error: '這首歌太長了，分析到一半就停了。刪掉一些句子再試' }, 422)
-  const text = (data.content ?? []).find((b) => b.type === 'text')?.text
-  let parsed
-  try {
-    parsed = JSON.parse(text ?? '')
-  } catch {
-    return json({ error: '分析結果讀不懂，再試一次' }, 502)
-  }
-
-  // 用行號對回去；模型漏掉的句子留原文，至少不會整首失敗
+  /*
+   * 分批送：一次整首（30 句以上）模型常常回到一半就收尾，後面的句子整片空白。
+   * 每批都附上整首當上下文，只要它分析那幾句；幾批同時送，總時間反而比較短。
+   * 全部回來後還缺的句子再補問一次。
+   */
   const byIndex = new Map()
-  for (const l of Array.isArray(parsed?.lines) ? parsed.lines : []) {
-    if (Number.isInteger(l?.i) && l.i >= 0 && l.i < unique.length && !byIndex.has(l.i)) byIndex.set(l.i, l)
+  let truncated = false
+  const ask = async (indices) => {
+    let upstream
+    try {
+      upstream = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: claudeHeaders(env),
+        body: JSON.stringify({
+          model: MODEL,
+          max_tokens: 16000,
+          messages: [{ role: 'user', content: songPrompt(title, artist, unique, zh, indices) }],
+          output_config: { format: { type: 'json_schema', schema: SONG_SCHEMA } },
+        }),
+      })
+    } catch {
+      return json({ error: '連不上分析服務，等一下再試' }, 502)
+    }
+    if (!upstream.ok) return upstreamError(upstream, '分析')
+
+    const data = await upstream.json()
+    if (data.stop_reason === 'refusal') return json({ error: '這首歌沒辦法分析，換一首試試' }, 422)
+    if (data.stop_reason === 'max_tokens') truncated = true
+    // 被截斷的話 JSON 不完整，讀不懂就當這批沒回來，等一下補問
+    const text = (data.content ?? []).find((b) => b.type === 'text')?.text
+    let parsed
+    try {
+      parsed = JSON.parse(text ?? '')
+    } catch {
+      return null
+    }
+    const wanted = new Set(indices)
+    for (const l of Array.isArray(parsed?.lines) ? parsed.lines : []) {
+      if (Number.isInteger(l?.i) && wanted.has(l.i) && !byIndex.has(l.i)) byIndex.set(l.i, l)
+    }
+    return null
   }
+
+  const every = unique.map((_, i) => i)
+  const batches = []
+  for (let i = 0; i < every.length; i += SONG_BATCH) batches.push(every.slice(i, i + SONG_BATCH))
+  for (const failure of await Promise.all(batches.map(ask))) {
+    if (failure) return failure
+  }
+  const missing = every.filter((i) => !byIndex.has(i))
+  if (missing.length) {
+    const failure = await ask(missing)
+    if (failure && !byIndex.size) return failure
+  }
+  if (!byIndex.size) {
+    return truncated
+      ? json({ error: '這首歌太長了，分析到一半就停了。刪掉一些句子再試' }, 422)
+      : json({ error: '分析結果讀不懂，再試一次' }, 502)
+  }
+
+  // 用行號對回去；還是漏掉的句子留原文，至少不會整首失敗
   const analysed = unique.map((jp, i) => {
     const l = byIndex.get(i)
     return {
