@@ -166,6 +166,16 @@ function gradePrompt(question, answer) {
   )
 }
 
+/**
+ * 不限次數的密鑰（管理員自己）。Worker 的 secret UNLIMITED_KEYS 放同步密鑰，多個用逗號分開。
+ * 這些密鑰不受每人每日上限，也不算進全站額度，不會擠掉其他人。
+ */
+function isUnlimited(env, key) {
+  return String(env.UNLIMITED_KEYS ?? '')
+    .split(/[\s,]+/)
+    .includes(key)
+}
+
 function globalDailyLimit(env) {
   const n = Number(env.GRADE_GLOBAL_DAILY)
   return Number.isFinite(n) && n >= 0 ? n : GRADE_GLOBAL_DAILY
@@ -252,16 +262,17 @@ async function handleGrade(request, env, key) {
   }
 
   const day = utcDay()
+  const unlimited = isUnlimited(env, key)
   const globalKey = `grade-all:${day}`
   const globalLimit = globalDailyLimit(env)
-  const globalUsed = Number((await env.SYNC.get(globalKey)) ?? 0)
-  if (globalUsed >= globalLimit) {
+  const globalUsed = unlimited ? 0 : Number((await env.SYNC.get(globalKey)) ?? 0)
+  if (!unlimited && globalUsed >= globalLimit) {
     return json({ error: '今天全站的批改額度用完了，明天再來' }, 503)
   }
 
   const counterKey = `grade:${key}:${day}`
-  const used = Number((await env.SYNC.get(counterKey)) ?? 0)
-  if (used >= GRADE_DAILY_LIMIT) {
+  const used = unlimited ? 0 : Number((await env.SYNC.get(counterKey)) ?? 0)
+  if (!unlimited && used >= GRADE_DAILY_LIMIT) {
     return json({ error: `今天的批改次數用完了（上限 ${GRADE_DAILY_LIMIT} 次），明天再來` }, 429)
   }
 
@@ -318,6 +329,8 @@ async function handleGrade(request, env, key) {
    * 這只是防濫用不是計費，少算幾次可以接受；TTL 兩天讓舊的自己消失。
    * 真正的硬上限是 Anthropic Console 的每月花費上限（見 README）。
    */
+  // limit 0 代表不限次數，前端就不顯示剩幾次
+  if (unlimited) return json({ result, used: 0, limit: 0 })
   const ttl = { expirationTtl: 60 * 60 * 48 }
   await Promise.all([
     env.SYNC.put(counterKey, String(used + 1), ttl),
@@ -371,13 +384,14 @@ async function handleSong(request, env, key) {
 
   const day = utcDay()
   const globalKey = `grade-all:${day}`
-  const globalUsed = Number((await env.SYNC.get(globalKey)) ?? 0)
-  if (globalUsed + SONG_WEIGHT > globalDailyLimit(env)) {
+  const unlimited = isUnlimited(env, key)
+  const globalUsed = unlimited ? 0 : Number((await env.SYNC.get(globalKey)) ?? 0)
+  if (!unlimited && globalUsed + SONG_WEIGHT > globalDailyLimit(env)) {
     return json({ error: '今天全站的 AI 額度用完了，明天再來' }, 503)
   }
   const counterKey = `song:${key}:${day}`
-  const used = Number((await env.SYNC.get(counterKey)) ?? 0)
-  if (used >= SONG_DAILY_LIMIT) {
+  const used = unlimited ? 0 : Number((await env.SYNC.get(counterKey)) ?? 0)
+  if (!unlimited && used >= SONG_DAILY_LIMIT) {
     return json({ error: `今天分析歌詞的次數用完了（每天 ${SONG_DAILY_LIMIT} 首），明天再來` }, 429)
   }
 
@@ -454,18 +468,16 @@ async function handleSong(request, env, key) {
     }
   })
   const lineOf = new Map(unique.map((jp, i) => [jp, analysed[i]]))
+  const song = { title, artist, lines: all.map((jp) => lineOf.get(jp)) }
 
+  if (unlimited) return json({ song, used: 0, limit: 0 })
   const ttl = { expirationTtl: 60 * 60 * 48 }
   await Promise.all([
     env.SYNC.put(counterKey, String(used + 1), ttl),
     env.SYNC.put(globalKey, String(globalUsed + SONG_WEIGHT), ttl),
   ])
 
-  return json({
-    song: { title, artist, lines: all.map((jp) => lineOf.get(jp)) },
-    used: used + 1,
-    limit: SONG_DAILY_LIMIT,
-  })
+  return json({ song, used: used + 1, limit: SONG_DAILY_LIMIT })
 }
 
 async function handleSync(request, env, key) {

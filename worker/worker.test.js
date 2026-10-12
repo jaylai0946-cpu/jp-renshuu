@@ -411,6 +411,28 @@ describe('/song', () => {
     expect(body.song.lines.every((l, i) => l.zh === `z${i}`)).toBe(true)
   })
 
+  it('UNLIMITED_KEYS 裡的密鑰不受每日上限，也不算進全站額度', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => claudeReply({ lines: [{ i: 0, kana: '', ro: '', zh: '', words: [], note: '' }] })))
+    const e = { ...env(), UNLIMITED_KEYS: `other-key, ${KEY}` }
+    await e.SYNC.put(`song:${KEY}:${day()}`, '3')
+    await e.SYNC.put(`grade-all:${day()}`, '1000')
+    const res = await worker.fetch(post(`/song/${KEY}`, { title: '空', lyrics: '青い空' }), e)
+    expect(res.status).toBe(200)
+    expect((await res.json()).limit).toBe(0)
+    expect(await e.SYNC.get(`song:${KEY}:${day()}`)).toBe('3')
+    expect(await e.SYNC.get(`grade-all:${day()}`)).toBe('1000')
+
+    vi.stubGlobal('fetch', vi.fn(async () => claudeReply(GOOD)))
+    await e.SYNC.put(`grade:${KEY}:${day()}`, '50')
+    const g = await worker.fetch(post(`/grade/${KEY}`, { prompt: 'a', answer: 'b' }), e)
+    expect(g.status).toBe(200)
+
+    // 別人還是照樣擋
+    const other = { ...env(), UNLIMITED_KEYS: 'someone-else' }
+    await other.SYNC.put(`song:${KEY}:${day()}`, '3')
+    expect((await worker.fetch(post(`/song/${KEY}`, { title: '空', lyrics: '青い空' }), other)).status).toBe(429)
+  })
+
   it('附了中文歌詞就放進 prompt，要模型以那份為主；沒附就自己意譯', async () => {
     const spy = vi.fn(async () => claudeReply({ lines: [{ i: 0, kana: '', ro: '', zh: '', words: [], note: '' }] }))
     vi.stubGlobal('fetch', spy)

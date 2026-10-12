@@ -32,7 +32,8 @@ export function Compose({ config, onGraded }: Props) {
     <PageHead
       title="造句"
       right={
-        quota ? (
+        // limit 0 是不限次數的帳號
+        quota && quota.limit > 0 ? (
           <span className="pill pill-plain">
             今天還能批改 <b>{Math.max(0, quota.limit - quota.used)}</b> 次
           </span>
