@@ -67,6 +67,11 @@ export function wordKey(w: SongWord): string {
   return `${w.s}|${w.k}`
 }
 
+/** 有分析到的句數（模型偶爾會漏回幾句，那幾句就只有原文） */
+export function analysedCount(lines: SongLine[]): number {
+  return lines.filter((l) => l.kana || l.zh || l.words.length).length
+}
+
 /** 歌詞切成一段一段：標過的詞帶著 word，其他的字一個一個放（排版時才能在任何地方換行） */
 export interface GlossSeg {
   text: string

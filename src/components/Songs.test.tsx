@@ -173,6 +173,28 @@ describe('歌曲', () => {
     expect(songCalls[1]).toMatchObject({ zh: '抬頭望著藍天\n和你走過的路' })
   })
 
+  it('重新分析漏得比原本多就不蓋掉；有漏的句子會提醒', async () => {
+    await addSong()
+    const worse = {
+      ...ANALYSED,
+      lines: [ANALYSED.lines[0], { jp: '君と歩いた道', kana: '', ro: '', zh: '', note: '', words: [] }],
+    }
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) =>
+        url.includes('/song/')
+          ? new Response(JSON.stringify({ song: worse, used: 2, limit: 3 }), { status: 200 })
+          : new Response(JSON.stringify({ updatedAt: 't2' }), { status: 200 }),
+      ),
+    )
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '重新分析' }))
+    })
+    expect(screen.getByRole('alert')).toHaveTextContent('只分析到 1 / 2 句')
+    expect(screen.getByText('和你走過的路')).toBeInTheDocument()
+    expect(screen.queryByText(/句沒有分析到/)).toBeNull()
+  })
+
   it('把中文關掉可以先自己猜', async () => {
     await addSong()
     fireEvent.click(screen.getByRole('button', { name: '中文' }))

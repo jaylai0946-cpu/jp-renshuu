@@ -122,14 +122,19 @@ export function removeSong(state: AppState, id: string, now: string): AppState {
   }
 }
 
-/** 把一個詞標成「會了」或取消 */
-export function toggleSongWord(state: AppState, id: string, key: string, now: string): AppState {
+/**
+ * 把一個詞標成「會了」或取消。
+ *
+ * 不動 updated：合併時 known 本來就兩邊聯集，updated 只拿來決定歌詞分析留哪一份。
+ * 要是在還沒同步到新分析的裝置上點個單字就把時間往後推，舊的（漏句的）分析會蓋回新的。
+ */
+export function toggleSongWord(state: AppState, id: string, key: string): AppState {
   return {
     ...state,
     songs: state.songs.map((s) => {
       if (s.id !== id || s.deleted) return s
       const known = s.known.includes(key) ? s.known.filter((k) => k !== key) : [...s.known, key]
-      return { ...s, known, updated: now }
+      return { ...s, known }
     }),
   }
 }

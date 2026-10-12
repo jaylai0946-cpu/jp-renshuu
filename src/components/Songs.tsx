@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { vibrate } from '../lib/haptics'
 import {
   MIN_QUIZ_WORDS,
+  analysedCount,
   SONG_MAX_CHARS,
   SONG_MAX_LINES,
   analyzeSong,
@@ -322,6 +323,7 @@ function SongView({
   const [open, setOpen] = useState<Set<number>>(() => new Set())
   const known = new Set(song.known)
   const canQuiz = songWords(song).length >= MIN_QUIZ_WORDS
+  const blank = song.lines.length - analysedCount(song.lines)
 
   function toggleLine(i: number) {
     setOpen((prev) => {
@@ -349,6 +351,11 @@ function SongView({
     if (res.status === 'error') return setError(res.message)
     const next = validSong({ ...song, lines: res.lines, updated: new Date().toISOString() })
     if (!next) return setError('分析結果讀不懂，再試一次')
+    // 這次漏得比原本多就不要蓋掉，不然好好的分析會被換成一片空白
+    const got = analysedCount(next.lines)
+    if (got < analysedCount(song.lines)) {
+      return setError(`這次只分析到 ${got} / ${next.lines.length} 句，比原本的少，先保留原本的。再按一次試試。`)
+    }
     onReanalysed(next)
   }
 
@@ -379,6 +386,11 @@ function SongView({
         </button>
       </div>
       {!canQuiz ? <p className="muted small">這首歌的單字太少，出不了題。</p> : null}
+      {blank > 0 ? (
+        <p className="note">
+          有 {blank} 句沒有分析到{config ? '，可以按最下面的「重新分析」補上' : ''}。
+        </p>
+      ) : null}
 
       <div className="chips" role="group" aria-label="顯示">
         <button type="button" className={`chip${showKana ? ' on ink' : ''}`} aria-pressed={showKana} onClick={() => setShowKana((v) => !v)}>

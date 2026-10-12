@@ -292,7 +292,7 @@ export default function App() {
             config={sync.config}
             onAdd={(song) => setState((s) => addSong(s, song))}
             onRemove={(id) => setState((s) => removeSong(s, id, new Date().toISOString()))}
-            onToggleWord={(id, key) => setState((s) => toggleSongWord(s, id, key, new Date().toISOString()))}
+            onToggleWord={(id, key) => setState((s) => toggleSongWord(s, id, key))}
             onAnswer={(ok) => setState((s) => recordSongAnswer(s, ok, ymd()))}
           />
         ) : null}

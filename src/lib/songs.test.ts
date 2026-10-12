@@ -168,3 +168,14 @@ describe('splitLyrics', () => {
     expect(splitLyrics('这是我们的夏天').zhLines).toBe(1)
   })
 })
+
+describe('同步：點單字不會讓舊的分析蓋回新的', () => {
+  it('舊分析的裝置點了單字，合併後還是新分析，會了的詞也留著', async () => {
+    const { toggleSongWord } = await import('./actions')
+    const fresh: Song = { ...SONG, lines: SONG.lines.map((l) => ({ ...l, zh: '新翻譯' })), updated: '2026-10-12T02:00:00.000Z' }
+    const stale = toggleSongWord({ ...emptyState(), songs: [SONG] }, SONG.id, '空|そら')
+    const merged = mergeStates(stale, { ...emptyState(), songs: [fresh] })
+    expect(merged.songs[0].lines[0].zh).toBe('新翻譯')
+    expect(merged.songs[0].known).toEqual(['空|そら'])
+  })
+})
