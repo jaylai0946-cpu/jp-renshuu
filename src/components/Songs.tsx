@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { vibrate } from '../lib/haptics'
 import {
   MIN_QUIZ_WORDS,
@@ -18,6 +18,7 @@ import {
   type SongQuestion,
 } from '../lib/songs'
 import { speak } from '../lib/speech'
+import { holdReload } from '../lib/updates'
 import type { SyncConfig } from '../lib/sync'
 import { SONG_LIMITS, validSong } from '../lib/validate'
 import type { AppState, Song } from '../types'
@@ -143,6 +144,37 @@ export function Songs({ state, config, onAdd, onRemove, onToggleWord, onAnswer }
 
 // ---- 新增 ----
 
+/** 新增歌曲的草稿。貼了一長串歌詞，切出去再回來（或 App 更新重載）不該整個不見 */
+const DRAFT_KEY = 'jp-renshuu.song-draft'
+interface Draft {
+  title: string
+  artist: string
+  video: string
+  lyrics: string
+}
+
+function loadDraft(): Draft {
+  const empty = { title: '', artist: '', video: '', lyrics: '' }
+  try {
+    const raw: unknown = JSON.parse(localStorage.getItem(DRAFT_KEY) ?? 'null')
+    if (!raw || typeof raw !== 'object') return empty
+    const r = raw as Record<string, unknown>
+    const str = (v: unknown) => (typeof v === 'string' ? v : '')
+    return { title: str(r.title), artist: str(r.artist), video: str(r.video), lyrics: str(r.lyrics) }
+  } catch {
+    return empty
+  }
+}
+
+function saveDraft(d: Draft | null) {
+  try {
+    if (!d || !(d.title || d.artist || d.video || d.lyrics)) localStorage.removeItem(DRAFT_KEY)
+    else localStorage.setItem(DRAFT_KEY, JSON.stringify(d))
+  } catch {
+    // 存不了草稿不影響新增
+  }
+}
+
 function AddSong({
   config,
   full,
@@ -154,12 +186,17 @@ function AddSong({
   onCancel: () => void
   onDone: (song: Song) => void
 }) {
-  const [title, setTitle] = useState('')
-  const [artist, setArtist] = useState('')
-  const [video, setVideo] = useState('')
-  const [lyrics, setLyrics] = useState('')
+  const [draft] = useState(loadDraft)
+  const [title, setTitle] = useState(draft.title)
+  const [artist, setArtist] = useState(draft.artist)
+  const [video, setVideo] = useState(draft.video)
+  const [lyrics, setLyrics] = useState(draft.lyrics)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+
+  useEffect(() => saveDraft({ title, artist, video, lyrics }), [title, artist, video, lyrics])
+  // 分析要等幾十秒，這段時間不要因為新版重載把請求丟掉
+  useEffect(() => (busy ? holdReload() : undefined), [busy])
 
   // 日文／羅馬拼音／中文交錯貼進來的話：中文分出去當翻譯參考，羅馬拼音丟掉，都不算句數
   const split = splitLyrics(lyrics)
@@ -194,6 +231,7 @@ function AddSong({
       updated: new Date().toISOString(),
     })
     if (!song) return setError('分析結果讀不懂，再試一次')
+    saveDraft(null)
     onDone(song)
   }
 
@@ -275,7 +313,15 @@ function AddSong({
           {error ? <p className="err">{error}</p> : null}
 
           <div className="row">
-            <button type="button" className="btn" onClick={onCancel} disabled={busy}>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => {
+                saveDraft(null)
+                onCancel()
+              }}
+              disabled={busy}
+            >
               取消
             </button>
             <button type="submit" className="btn btn-red" disabled={busy || !title.trim() || !lines || tooLong}>
@@ -316,6 +362,7 @@ function SongView({
   const [showGloss, setShowGloss] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  useEffect(() => (busy ? holdReload() : undefined), [busy])
   const [open, setOpen] = useState<Set<number>>(() => new Set())
   const known = new Set(song.known)
   const canQuiz = songWords(song).length >= MIN_QUIZ_WORDS

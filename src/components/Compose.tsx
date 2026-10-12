@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { PROMPTS } from '../data/units'
 import { GRADE_LABEL, grade, type GradeResult } from '../lib/grade'
 import { speak } from '../lib/speech'
 import type { SyncConfig } from '../lib/sync'
 import { Icon, PageHead } from './ui'
+import { holdReload } from '../lib/updates'
 
 interface Props {
   /** 沒開同步就沒有端點可以呼叫，批改用不了 */
@@ -25,6 +26,8 @@ export function Compose({ config, onGraded }: Props) {
   const [result, setResult] = useState<GradeResult | null>(null)
   const [error, setError] = useState('')
   const [quota, setQuota] = useState<{ used: number; limit: number } | null>(null)
+  // 批改中不要因為新版重載，不然結果回不來
+  useEffect(() => (loading ? holdReload() : undefined), [loading])
 
   const question = index === CUSTOM ? custom.trim() : PROMPTS[index]
 

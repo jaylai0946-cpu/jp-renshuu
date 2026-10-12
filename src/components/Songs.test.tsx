@@ -197,6 +197,25 @@ describe('歌曲', () => {
     expect(screen.queryByText(/句沒有分析到/)).toBeNull()
   })
 
+  it('貼到一半的歌詞會留著：重新整理回來還在；分析成功或按取消才清掉', async () => {
+    const first = render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: /歌曲/ }))
+    fireEvent.click(screen.getByRole('button', { name: /新增第一首歌/ }))
+    fireEvent.change(screen.getByLabelText('歌名'), { target: { value: '嘘月' } })
+    fireEvent.change(screen.getByLabelText(/^歌詞/), { target: { value: '青い空を見上げて' } })
+    first.unmount()
+
+    const second = render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: /歌曲/ }))
+    fireEvent.click(screen.getByRole('button', { name: /新增第一首歌/ }))
+    expect(screen.getByLabelText('歌名')).toHaveValue('嘘月')
+    expect(screen.getByLabelText(/^歌詞/)).toHaveValue('青い空を見上げて')
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+    fireEvent.click(screen.getByRole('button', { name: /新增第一首歌/ }))
+    expect(screen.getByLabelText('歌名')).toHaveValue('')
+    second.unmount()
+  })
+
   it('把中文關掉可以先自己猜', async () => {
     await addSong()
     fireEvent.click(screen.getByRole('button', { name: '中文' }))

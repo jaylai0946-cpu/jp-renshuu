@@ -1,4 +1,5 @@
 import { act, renderHook } from '@testing-library/react'
+import { useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { emptyState } from './lib/storage'
 import type { AppState } from './types'
@@ -136,5 +137,126 @@ describe('同步的推送頻率', () => {
     rerender({ state: version(1) })
     await act(() => vi.advanceTimersByTimeAsync(1_600))
     expect(puts().length).toBe(before + 1)
+  })
+})
+
+describe('拉雲端的途中新增東西不會不見', () => {
+  function song(id: string): AppState['songs'][number] {
+    return {
+      id,
+      title: id,
+      artist: '',
+      video: '',
+      known: [],
+      updated: '2026-10-12T00:00:00.000Z',
+      lines: [{ jp: '青い空', kana: '', ro: '', zh: '', note: '', words: [] }],
+    }
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('另一台改過雲端、這台拉的途中剛好新增一首歌：合併，不整份套用雲端', async () => {
+    const remoteOld = { ...emptyState(), songs: [song('song-old000')] }
+    const remoteNew = { ...emptyState(), songs: [song('song-old000'), song('song-phone0')] }
+    localStorage.clear()
+    localStorage.setItem(
+      'jp-renshuu.sync',
+      JSON.stringify({ endpoint: ENDPOINT, key: KEY, lastSeen: 'r1', dirty: false }),
+    )
+
+    let release: () => void = () => {}
+    let gets = 0
+    const pushed: AppState[] = []
+    // 雲端：另一台在這台第二次拉之前已經推了 r2
+    let remote = { updatedAt: 'r2', state: remoteNew }
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init: RequestInit = {}) => {
+        if ((init.method ?? 'GET') === 'GET') {
+          gets++
+          if (gets === 1) return new Response(JSON.stringify({ updatedAt: 'r1', state: remoteOld }), { status: 200 })
+          // 第二次拉（切回分頁）卡住，等測試放行；這段時間另一台已經推了 r2
+          await new Promise<void>((r) => (release = r))
+          return new Response(JSON.stringify({ updatedAt: 'r2', state: remoteNew }), { status: 200 })
+        }
+        const ifMatch = new Headers(init.headers).get('If-Match')?.replace(/"/g, '')
+        if (ifMatch !== remote.updatedAt) {
+          return new Response(JSON.stringify({ error: 'conflict', remote }), { status: 409 })
+        }
+        const state = (JSON.parse(String(init.body)) as { state: AppState }).state
+        pushed.push(state)
+        remote = { updatedAt: `p${pushed.length}`, state }
+        return new Response(JSON.stringify({ updatedAt: remote.updatedAt }), { status: 200 })
+      }),
+    )
+
+    const { result } = renderHook(() => {
+      const [state, setState] = useState<AppState>(remoteOld)
+      useSync(state, setState)
+      return { state, setState }
+    })
+    await act(async () => {})
+    expect(gets).toBe(1)
+
+    // 切回分頁 → 開始拉；拉到一半，歌詞分析回來、新增了一首歌
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+    act(() => result.current.setState((s) => ({ ...s, songs: [song('song-new000'), ...s.songs] })))
+    await act(async () => {
+      release()
+      await new Promise((r) => setTimeout(r, 0))
+    })
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 1700))
+    })
+
+    expect(gets).toBe(2)
+    const ids = (s: AppState) => s.songs.map((x) => x.id).sort()
+    expect(ids(result.current.state)).toEqual(['song-new000', 'song-old000', 'song-phone0'])
+    expect(ids(pushed.at(-1)!)).toEqual(['song-new000', 'song-old000', 'song-phone0'])
+  })
+
+  it('開 App 第一次拉雲端還沒回來時新增的東西，拉回來也不會被蓋掉', async () => {
+    const remoteNew = { ...emptyState(), songs: [song('song-phone0')] }
+    localStorage.clear()
+    localStorage.setItem(
+      'jp-renshuu.sync',
+      JSON.stringify({ endpoint: ENDPOINT, key: KEY, lastSeen: 'r1', dirty: false }),
+    )
+    let release: () => void = () => {}
+    let remote = { updatedAt: 'r2', state: remoteNew }
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init: RequestInit = {}) => {
+        if ((init.method ?? 'GET') === 'GET') {
+          await new Promise<void>((r) => (release = r))
+          return new Response(JSON.stringify(remote), { status: 200 })
+        }
+        const ifMatch = new Headers(init.headers).get('If-Match')?.replace(/"/g, '')
+        if (ifMatch !== remote.updatedAt) {
+          return new Response(JSON.stringify({ error: 'conflict', remote }), { status: 409 })
+        }
+        remote = { updatedAt: 'p', state: (JSON.parse(String(init.body)) as { state: AppState }).state }
+        return new Response(JSON.stringify({ updatedAt: 'p' }), { status: 200 })
+      }),
+    )
+
+    const { result } = renderHook(() => {
+      const [state, setState] = useState<AppState>(emptyState())
+      useSync(state, setState)
+      return { state, setState }
+    })
+    act(() => result.current.setState((s) => ({ ...s, songs: [song('song-new000')] })))
+    await act(async () => {
+      release()
+      await new Promise((r) => setTimeout(r, 50))
+    })
+
+    const ids = (s: AppState) => s.songs.map((x) => x.id).sort()
+    expect(ids(result.current.state)).toEqual(['song-new000', 'song-phone0'])
+    expect(ids(remote.state)).toEqual(['song-new000', 'song-phone0'])
   })
 })

@@ -58,6 +58,16 @@ export function useSync(state: AppState, applyRemote: (next: AppState) => void) 
   const timerRef = useRef<number | undefined>(undefined)
   /** 上一次開始推送的時間。用來算下一次最早什麼時候能推 */
   const lastPushRef = useRef(0)
+  /**
+   * 本機改動的流水號，每改一次加一。
+   *
+   * 拉／推都要等網路，等的途中使用者可能又改了東西（例如歌詞分析剛好回來、新增了一首歌）。
+   * 網路回來時不能拿出發前的 dirty 判斷，不然會把雲端那份整份蓋到本機、
+   * 或把還沒推的改動標成已推——剛新增的歌就這樣不見。用流水號比對出發前後有沒有新改動。
+   */
+  const revRef = useRef(0)
+  /** 上一次看到的 state，第一次 render 不算改動 */
+  const lastStateRef = useRef(state)
 
   /** 元件已經卸載就不要再寫。非同步的同步鏈可能在卸載之後才回來 */
   const mountedRef = useRef(true)
@@ -91,12 +101,14 @@ export function useSync(state: AppState, applyRemote: (next: AppState) => void) 
     if (!current) return
     lastPushRef.current = Date.now()
     setStatus({ kind: 'busy' })
+    const rev = revRef.current
 
     const result = await push(current, stateRef.current, options)
     if (!stillCurrent(current)) return
 
     if (result.status === 'ok') {
-      commitConfig({ ...current, lastSeen: result.updatedAt, dirty: false })
+      // 推的途中又有改動的話還是 dirty，等下一次推（改動時已經排好了）
+      commitConfig({ ...current, lastSeen: result.updatedAt, dirty: revRef.current !== rev })
       setStatus({ kind: 'idle', at: result.updatedAt })
     } else if (result.status === 'conflict') {
       // 推的途中另一台先推上去了。合併之後再推一次，一樣不叫人二選一
@@ -108,7 +120,7 @@ export function useSync(state: AppState, applyRemote: (next: AppState) => void) 
       if (!stillCurrent(current)) return
 
       if (retry.status === 'ok') {
-        commitConfig({ ...current, lastSeen: retry.updatedAt, dirty: false })
+        commitConfig({ ...current, lastSeen: retry.updatedAt, dirty: revRef.current !== rev })
         setStatus({ kind: 'merged', at: retry.updatedAt })
       } else {
         // 只重試一次。再撞就把合併結果留在本機，下次開 App 對一次就好
@@ -127,9 +139,12 @@ export function useSync(state: AppState, applyRemote: (next: AppState) => void) 
     const current = configRef.current
     if (!current) return
     setStatus({ kind: 'busy' })
+    const rev = revRef.current
 
     const result = await pull(current)
     if (!stillCurrent(current)) return
+    // 拉的途中本機有新改動，也算 dirty：要合併，不能整份套用雲端
+    const dirty = current.dirty || revRef.current !== rev
 
     if (result.status === 'error') {
       setStatus({ kind: 'error', message: result.message })
@@ -144,7 +159,7 @@ export function useSync(state: AppState, applyRemote: (next: AppState) => void) 
 
     const remote = result.record
 
-    if (current.dirty && remote.updatedAt !== current.lastSeen) {
+    if (dirty && remote.updatedAt !== current.lastSeen) {
       /*
        * 兩邊都練過。合併，不要叫人二選一。
        *
@@ -158,11 +173,12 @@ export function useSync(state: AppState, applyRemote: (next: AppState) => void) 
       settledRef.current = true
 
       // lastSeen 用剛拉到的那個版本，推上去才不會又被判成衝突
+      const rev2 = revRef.current
       const result = await push({ ...current, lastSeen: remote.updatedAt }, merged)
       if (!stillCurrent(current)) return
 
       if (result.status === 'ok') {
-        commitConfig({ ...current, lastSeen: result.updatedAt, dirty: false })
+        commitConfig({ ...current, lastSeen: result.updatedAt, dirty: revRef.current !== rev2 })
         setStatus({ kind: 'merged', at: result.updatedAt })
       } else if (result.status === 'conflict') {
         // 合併期間又被另一台改了。合併的結果先留在本機，下次再對一次
@@ -175,7 +191,7 @@ export function useSync(state: AppState, applyRemote: (next: AppState) => void) 
       return
     }
 
-    if (!current.dirty && remote.updatedAt !== current.lastSeen) {
+    if (!dirty && remote.updatedAt !== current.lastSeen) {
       appliedRef.current = remote.state
       applyRemote(remote.state)
       commitConfig({ ...current, lastSeen: remote.updatedAt, dirty: false })
@@ -185,7 +201,7 @@ export function useSync(state: AppState, applyRemote: (next: AppState) => void) 
     }
 
     settledRef.current = true
-    if (current.dirty) await doPush()
+    if (dirty) await doPush()
     else setStatus({ kind: 'idle', at: remote.updatedAt })
   }, [applyRemote, commitConfig, doPush])
 
@@ -198,13 +214,17 @@ export function useSync(state: AppState, applyRemote: (next: AppState) => void) 
 
   // 本機改動 -> 標記 dirty -> 排一次推送（已經排了就不重排，推的時候會帶最新的 state）
   useEffect(() => {
-    const current = configRef.current
-    if (!current || !settledRef.current) return
+    if (lastStateRef.current === state) return
+    lastStateRef.current = state
     if (appliedRef.current === state) {
       appliedRef.current = null
       return
     }
+    // 還沒對完雲端也要記：第一次拉的途中改的東西，拉回來時才知道要合併而不是整份套用
+    revRef.current++
 
+    const current = configRef.current
+    if (!current || !settledRef.current) return
     commitConfig({ ...current, dirty: true })
     if (timerRef.current !== undefined) return
     const wait = Math.max(PUSH_DEBOUNCE_MS, lastPushRef.current + PUSH_INTERVAL_MS - Date.now())

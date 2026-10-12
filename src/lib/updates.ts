@@ -10,16 +10,36 @@ export const BUILD_ID = __BUILD_ID__
 export const BUILD_TIME = __BUILD_TIME__
 
 let reloading = false
+let reloadPending = false
+const holds = new Set<symbol>()
+
+function reload() {
+  // 擋掉重複觸發，否則舊版 Safari 會連續 reload 變成無限迴圈
+  if (reloading) return
+  reloading = true
+  window.location.reload()
+}
+
+/**
+ * 先不要因為新版重載。歌詞分析、批改這種要等幾十秒的請求還在跑時，
+ * 重載會把請求和剛貼的歌詞一起丟掉。回傳的函式解除；全部解除後才補重載。
+ */
+export function holdReload(): () => void {
+  const token = Symbol()
+  holds.add(token)
+  return () => {
+    holds.delete(token)
+    if (reloadPending && holds.size === 0) reload()
+  }
+}
 
 export function watchForUpdates(): void {
   if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
 
+  // 新的 service worker 接手時觸發
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    // 這個事件在新的 service worker 接手時觸發。擋掉重複觸發，
-    // 否則舊版 Safari 會連續 reload 變成無限迴圈。
-    if (reloading) return
-    reloading = true
-    window.location.reload()
+    if (holds.size) reloadPending = true
+    else reload()
   })
 
   // 瀏覽器只在冷啟動時檢查新版。iPad 上加到主畫面的 App 常常一直掛在背景，
