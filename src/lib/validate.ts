@@ -95,7 +95,7 @@ export function validateAppState(raw: unknown, today: string): ValidationResult 
 // 歌詞是使用者貼的、分析結果是 AI 給的，兩邊都不信：每個字串都截長度，
 // 陣列都限數量，免得一份壞掉的資料把同步的容量塞爆。
 
-export const SONG_LIMITS = { songs: 30, lines: 120, words: 12, text: 300, note: 400, known: 1000 }
+export const SONG_LIMITS = { songs: 30, lines: 200, words: 12, text: 300, note: 400, known: 1000 }
 
 function str(v: unknown, max: number): string {
   return typeof v === 'string' ? v.slice(0, max) : ''

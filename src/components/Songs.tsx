@@ -5,6 +5,7 @@ import {
   analysedCount,
   SONG_MAX_CHARS,
   SONG_MAX_LINES,
+  SONG_MAX_ZH_CHARS,
   analyzeSong,
   buildSongQuiz,
   glossSegments,
@@ -157,21 +158,20 @@ function AddSong({
   const [artist, setArtist] = useState('')
   const [video, setVideo] = useState('')
   const [lyrics, setLyrics] = useState('')
-  const [zhText, setZhText] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
-  // 日文、中文交錯貼進來的話，中文行分出去當翻譯參考，不算句數
+  // 日文／羅馬拼音／中文交錯貼進來的話：中文分出去當翻譯參考，羅馬拼音丟掉，都不算句數
   const split = splitLyrics(lyrics)
-  const zh = [split.zh, zhText.trim()].filter(Boolean).join('\n')
+  const zh = split.zh
   const lines = uniqueLineCount(split.jp)
   const videoId = parseYouTubeId(video)
-  const tooLong = lines > SONG_MAX_LINES || split.jp.length > SONG_MAX_CHARS || zh.length > SONG_MAX_CHARS
+  const tooLong = lines > SONG_MAX_LINES || split.jp.length > SONG_MAX_CHARS || zh.length > SONG_MAX_ZH_CHARS
 
   async function submit() {
     if (!config || busy) return
     if (!title.trim() || !lines) return setError('歌名和歌詞都要填')
-    if (tooLong) return setError(`太長了：不同的句子最多 ${SONG_MAX_LINES} 句、全部最多 ${SONG_MAX_CHARS} 字`)
+    if (tooLong) return setError(`太長了：不同的日文句子最多 ${SONG_MAX_LINES} 句、日文最多 ${SONG_MAX_CHARS} 字`)
     if (video.trim() && !videoId) return setError('看不懂這個 YouTube 連結，可以留空')
     setError('')
     setBusy(true)
@@ -244,33 +244,29 @@ function AddSong({
             autoComplete="off"
           />
 
-          <label htmlFor="song-lyrics">日文歌詞（一句一行）</label>
+          <label htmlFor="song-lyrics">歌詞（一句一行，日文／羅馬拼音／中文混著貼也可以）</label>
           <textarea
             id="song-lyrics"
             lang="ja"
             rows={10}
             value={lyrics}
             onChange={(e) => setLyrics(e.target.value)}
-            placeholder="從歌詞網站複製整首貼上（日文、中文一行一行交錯也可以）"
+            placeholder="從歌詞網站複製整首貼上。有附中文的話，翻譯會以你貼的為主"
           />
           <p className={`small ${tooLong ? 'err' : 'muted'}`} style={{ margin: 0 }}>
-            {lines} / {SONG_MAX_LINES} 句（重複的副歌只算一次）
+            日文 {lines} / {SONG_MAX_LINES} 句（重複的副歌只算一次）
           </p>
-          {split.zhLines ? (
+          {split.zhLines || split.roLines ? (
             <p className="muted small" style={{ margin: 0 }}>
-              裡面有 {split.zhLines} 行中文，會當成中文翻譯，不算句數。
+              {[
+                split.zhLines ? `${split.zhLines} 行中文會當成翻譯` : '',
+                split.roLines ? `${split.roLines} 行羅馬拼音會略過` : '',
+              ]
+                .filter(Boolean)
+                .join('、')}
+              ，都不算句數。
             </p>
           ) : null}
-
-          <label htmlFor="song-zh">中文歌詞（選填，有貼的話翻譯以這份為主）</label>
-          <textarea
-            id="song-zh"
-            lang="zh-Hant"
-            rows={5}
-            value={zhText}
-            onChange={(e) => setZhText(e.target.value)}
-            placeholder="可以留空，讓 AI 翻譯"
-          />
 
           <p className="muted small" style={{ margin: 0 }}>
             歌詞只存在你自己的帳號裡，不會分享給別人。分析一首大約 30–60 秒，每天最多 3 首。

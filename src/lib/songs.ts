@@ -1,28 +1,73 @@
 import type { Song, SongLine, SongWord } from '../types'
 import { urlFor, type SyncConfig } from './sync'
 
-/** 跟 Worker 的上限一致：不同的句子最多 60 句、全部最多 4000 字 */
-export const SONG_MAX_LINES = 60
-export const SONG_MAX_CHARS = 4000
+/** 跟 Worker 的上限一致：不同的日文句子最多 100 句、日文最多 6000 字、中文最多 8000 字 */
+export const SONG_MAX_LINES = 100
+export const SONG_MAX_CHARS = 6000
+export const SONG_MAX_ZH_CHARS = 8000
 
 const KANA = /[\u3041-\u3096\u30a1-\u30fa]/
-/** 日文幾乎不會用、中文歌詞很常見的字（繁簡都放）。沒有假名又有這些字的行就當成中文 */
+const HAN = /[\u3400-\u4dbf\u4e00-\u9fff]/
+/** 羅馬拼音或英文：只有拉丁字母、數字、標點（含 ō、ū 這類長音符號） */
+const LATIN = /^[\x20-\x7e\u00c0-\u017f\u2019\u2018]+$/
+/** 日文幾乎不會用、中文歌詞很常見的字（繁簡都放） */
 const CHINESE_ONLY = /[的了們们這这嗎吗麼么著着沒没說说會你妳她吧呢啊哦讓让給给從从为对个]/
 
+type Row = 'jp' | 'latin' | 'han' | 'zh'
+
 /**
- * 從歌詞網站複製時常常日文、中文一行一行交錯。把中文行挑出來當翻譯參考，
- * 只留日文行去分析。純漢字的日文短句（例如「月光」）沒有那些中文才有的字，會留在日文這邊。
+ * 從歌詞網站複製時常常是「日文／羅馬拼音／中文」一行一行交錯。
+ * 日文行拿去分析，中文行當翻譯參考，羅馬拼音丟掉（分析時會重新標）。
+ *
+ * - 有假名的一定是日文
+ * - 只有拉丁字母的：大部分日文行後面都跟著一行的話，就是那首歌附的羅馬拼音；
+ *   不然當成歌詞本身的英文
+ * - 沒假名、有中文才有的字（的、了、們…）是中文
+ * - 只有漢字、看不出來的（「月光」「無論如何」）看位置：後面跟著羅馬拼音的是日文；
+ *   整首是交錯貼的話，緊接在日文或羅馬拼音後面的是中文翻譯；其他當日文
  */
-export function splitLyrics(text: string): { jp: string; zh: string; zhLines: number } {
+export function splitLyrics(text: string): { jp: string; zh: string; zhLines: number; roLines: number } {
+  const rows = text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean)
+  const kinds: Row[] = rows.map((line) =>
+    KANA.test(line)
+      ? 'jp'
+      : LATIN.test(line)
+        ? 'latin'
+        : !HAN.test(line)
+          ? 'jp'
+          : CHINESE_ONLY.test(line)
+            ? 'zh'
+            : 'han',
+  )
+
+  const japanese = kinds.filter((k) => k === 'jp' || k === 'han').length
+  const followedByLatin = kinds.filter((k, i) => (k === 'jp' || k === 'han') && kinds[i + 1] === 'latin').length
+  const romajiMode = followedByLatin >= 2 && followedByLatin >= japanese * 0.5
+  const zhCount = kinds.filter((k) => k === 'zh').length
+  const zhMode = zhCount >= 2 && zhCount >= kinds.filter((k) => k === 'jp').length * 0.3
+
   const jp: string[] = []
   const zh: string[] = []
-  for (const raw of text.split(/\r?\n/)) {
-    const line = raw.trim()
-    if (!line) continue
-    if (!KANA.test(line) && CHINESE_ONLY.test(line)) zh.push(line)
-    else jp.push(line)
-  }
-  return { jp: jp.join('\n'), zh: zh.join('\n'), zhLines: zh.length }
+  let roLines = 0
+  let prev: 'jp' | 'ro' | 'zh' | null = null
+  rows.forEach((line, i) => {
+    let kind: 'jp' | 'ro' | 'zh'
+    const k = kinds[i]
+    if (k === 'jp') kind = 'jp'
+    else if (k === 'zh') kind = 'zh'
+    else if (k === 'latin') kind = romajiMode && prev === 'jp' ? 'ro' : 'jp'
+    else if (romajiMode && kinds[i + 1] === 'latin') kind = 'jp'
+    else kind = zhMode && (prev === 'jp' || prev === 'ro') ? 'zh' : 'jp'
+
+    if (kind === 'jp') jp.push(line)
+    else if (kind === 'zh') zh.push(line)
+    else roLines++
+    prev = kind
+  })
+  return { jp: jp.join('\n'), zh: zh.join('\n'), zhLines: zh.length, roLines }
 }
 
 /** 不同的句子有幾句（重複的副歌只算一次，跟 Worker 算法一樣） */

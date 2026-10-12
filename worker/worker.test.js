@@ -433,6 +433,27 @@ describe('/song', () => {
     expect((await worker.fetch(post(`/song/${KEY}`, { title: '空', lyrics: '青い空' }), other)).status).toBe(429)
   })
 
+  it('一次最多同時送 4 批，免得撞到 API 每分鐘上限', async () => {
+    const lyrics = Array.from({ length: 95 }, (_, i) => `歌詞${i}です`).join('\n')
+    let inFlight = 0
+    let peak = 0
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url, init) => {
+        inFlight++
+        peak = Math.max(peak, inFlight)
+        await new Promise((r) => setTimeout(r, 5))
+        inFlight--
+        const only = JSON.parse(init.body).messages[0].content.match(/只分析編號 ([\d、]+) 這/)[1].split('、').map(Number)
+        return claudeReply({ lines: only.map((i) => ({ i, kana: 'k', ro: '', zh: 'z', words: [], note: '' })) })
+      }),
+    )
+    const res = await worker.fetch(post(`/song/${KEY}`, { title: '長', lyrics }), env())
+    expect(res.status).toBe(200)
+    expect(peak).toBe(4)
+    expect((await res.json()).song.lines.every((l) => l.zh === 'z')).toBe(true)
+  })
+
   it('附了中文歌詞就放進 prompt，要模型以那份為主；沒附就自己意譯', async () => {
     const spy = vi.fn(async () => claudeReply({ lines: [{ i: 0, kana: '', ro: '', zh: '', words: [], note: '' }] }))
     vi.stubGlobal('fetch', spy)
@@ -448,7 +469,7 @@ describe('/song', () => {
   })
 
   it('中文歌詞太長就擋', async () => {
-    const res = await worker.fetch(post(`/song/${KEY}`, { title: '空', lyrics: '青い空', zh: '天'.repeat(4001) }), env())
+    const res = await worker.fetch(post(`/song/${KEY}`, { title: '空', lyrics: '青い空', zh: '天'.repeat(8001) }), env())
     expect(res.status).toBe(400)
   })
 
@@ -468,8 +489,8 @@ describe('/song', () => {
   it('歌名或歌詞空的、太長的都擋，不打 API', async () => {
     const spy = vi.fn()
     vi.stubGlobal('fetch', spy)
-    const tooMany = Array.from({ length: 61 }, (_, i) => `歌詞${i}`).join('\n')
-    for (const body of [{ title: '', lyrics: LYRICS }, { title: '空', lyrics: '  ' }, { title: '空', lyrics: tooMany }, { title: '空', lyrics: 'あ'.repeat(4001) }]) {
+    const tooMany = Array.from({ length: 101 }, (_, i) => `歌詞${i}`).join('\n')
+    for (const body of [{ title: '', lyrics: LYRICS }, { title: '空', lyrics: '  ' }, { title: '空', lyrics: tooMany }, { title: '空', lyrics: 'あ'.repeat(6001) }]) {
       expect((await worker.fetch(post(`/song/${KEY}`, body), env())).status).toBe(400)
     }
     expect(spy).not.toHaveBeenCalled()

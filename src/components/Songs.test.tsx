@@ -75,7 +75,7 @@ describe('歌曲', () => {
     fireEvent.change(screen.getByLabelText('歌名'), { target: { value: '空の歌' } })
     fireEvent.change(screen.getByLabelText('歌手（選填）'), { target: { value: '某歌手' } })
     fireEvent.change(screen.getByLabelText(/YouTube 連結/), { target: { value: 'https://youtu.be/dQw4w9WgXcQ' } })
-    fireEvent.change(screen.getByLabelText(/日文歌詞/), { target: { value: '青い空を見上げて\n君と歩いた道' } })
+    fireEvent.change(screen.getByLabelText(/^歌詞/), { target: { value: '青い空を見上げて\n君と歩いた道' } })
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: '分析歌詞' }))
     })
@@ -144,17 +144,19 @@ describe('歌曲', () => {
     expect(saved.songs[0]).toMatchObject({ video: 'dQw4w9WgXcQ', known: ['見上げて|みあげて'] })
   })
 
-  it('日中交錯貼、另外貼中文：只送日文去分析，中文當翻譯參考；重新分析沿用自己的翻譯', async () => {
+  it('日文／羅馬拼音／中文交錯貼：只送日文去分析，中文當翻譯參考；重新分析沿用自己的翻譯', async () => {
     render(<App />)
     fireEvent.click(screen.getByRole('button', { name: /歌曲/ }))
     fireEvent.click(screen.getByRole('button', { name: /新增第一首歌/ }))
     fireEvent.change(screen.getByLabelText('歌名'), { target: { value: '空の歌' } })
-    fireEvent.change(screen.getByLabelText(/日文歌詞/), {
-      target: { value: '青い空を見上げて\n抬頭望著藍天\n君と歩いた道' },
+    fireEvent.change(screen.getByLabelText(/^歌詞/), {
+      target: {
+        value: '青い空を見上げて\naoi sora wo miagete\n抬頭望著藍天\n\n君と歩いた道\nkimi to aruita michi\n和你走過的路',
+      },
     })
-    expect(screen.getByText(/裡面有 1 行中文/)).toBeInTheDocument()
-    expect(screen.getByText(/2 \/ 60 句/)).toBeInTheDocument()
-    fireEvent.change(screen.getByLabelText(/中文歌詞/), { target: { value: '和你走過的路' } })
+    expect(screen.getByText(/2 行中文會當成翻譯、2 行羅馬拼音會略過/)).toBeInTheDocument()
+    expect(screen.getByText(/日文 2 \/ 100 句/)).toBeInTheDocument()
+    expect(screen.queryByLabelText(/中文歌詞/)).toBeNull()
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: '分析歌詞' }))
     })
@@ -237,10 +239,10 @@ describe('歌曲', () => {
     fireEvent.click(screen.getByRole('button', { name: /歌曲/ }))
     fireEvent.click(screen.getByRole('button', { name: /新增第一首歌/ }))
     fireEvent.change(screen.getByLabelText('歌名'), { target: { value: 'x' } })
-    fireEvent.change(screen.getByLabelText(/日文歌詞/), {
-      target: { value: Array.from({ length: 61 }, (_, i) => `歌詞${i}`).join('\n') },
+    fireEvent.change(screen.getByLabelText(/^歌詞/), {
+      target: { value: Array.from({ length: 101 }, (_, i) => `歌詞${i}`).join('\n') },
     })
     expect(screen.getByRole('button', { name: '分析歌詞' })).toBeDisabled()
-    expect(within(document.querySelector('.songform')!).getByText(/61 \/ 60 句/)).toBeInTheDocument()
+    expect(within(document.querySelector('.songform')!).getByText(/101 \/ 100 句/)).toBeInTheDocument()
   })
 })

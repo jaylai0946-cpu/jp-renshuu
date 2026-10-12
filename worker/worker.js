@@ -49,8 +49,11 @@ const SONG_WEIGHT = 15
 /** 一批分析幾句。太多模型會回到一半就收尾 */
 const SONG_BATCH = 10
 /** 不同的句子最多幾句。重複的副歌只算一次 */
-const SONG_MAX_LINES = 60
-const SONG_MAX_CHARS = 4000
+const SONG_MAX_LINES = 100
+const SONG_MAX_CHARS = 6000
+const SONG_MAX_ZH_CHARS = 8000
+/** 同時送幾批。太多會撞到 API 的每分鐘上限 */
+const SONG_PARALLEL = 4
 const MAX_ANSWER_CHARS = 500
 
 /** 便宜又快，批改一句日文綽綽有餘。約 US$0.0016 一次 */
@@ -369,7 +372,7 @@ async function handleSong(request, env, key) {
   if (!title || !lyrics.trim()) return json({ error: '歌名和歌詞都要有' }, 400)
   if (lyrics.length > SONG_MAX_CHARS) return json({ error: `歌詞太長了，最多 ${SONG_MAX_CHARS} 個字` }, 400)
   const zh = String(body?.zh ?? '').trim()
-  if (zh.length > SONG_MAX_CHARS) return json({ error: `中文歌詞太長了，最多 ${SONG_MAX_CHARS} 個字` }, 400)
+  if (zh.length > SONG_MAX_ZH_CHARS) return json({ error: `中文歌詞太長了，最多 ${SONG_MAX_ZH_CHARS} 個字` }, 400)
 
   const all = lyrics
     .split(/\r?\n/)
@@ -441,9 +444,18 @@ async function handleSong(request, env, key) {
   const every = unique.map((_, i) => i)
   const batches = []
   for (let i = 0; i < every.length; i += SONG_BATCH) batches.push(every.slice(i, i + SONG_BATCH))
-  for (const failure of await Promise.all(batches.map(ask))) {
-    if (failure) return failure
-  }
+  // 一次最多 SONG_PARALLEL 批，做完一批再補下一批
+  let next = 0
+  const failures = []
+  await Promise.all(
+    Array.from({ length: Math.min(SONG_PARALLEL, batches.length) }, async () => {
+      while (next < batches.length && !failures.length) {
+        const failure = await ask(batches[next++])
+        if (failure) failures.push(failure)
+      }
+    }),
+  )
+  if (failures.length) return failures[0]
   const missing = every.filter((i) => !byIndex.has(i))
   if (missing.length) {
     const failure = await ask(missing)

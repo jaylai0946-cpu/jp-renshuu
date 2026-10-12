@@ -164,6 +164,34 @@ describe('splitLyrics', () => {
     expect(r.jp.split('\n')).toHaveLength(4)
   })
 
+  it('日文／羅馬拼音／中文三行一組：羅馬拼音略過，只有漢字的中文翻譯也認得', () => {
+    const r = splitLyrics(
+      [
+        '君がいれば僕に不可能なんか無い',
+        'kimi ga ireba bokuni fukanou nanka nai',
+        '只要你在的話就沒有什麼不可能啊',
+        '無い',
+        'nai',
+        '沒有啊',
+        '月光',
+        'gekkō',
+        '月光',
+        '夢を見た',
+        'yume wo mita',
+        '無論如何',
+      ].join('\n'),
+    )
+    expect(r.jp.split('\n')).toEqual(['君がいれば僕に不可能なんか無い', '無い', '月光', '夢を見た'])
+    expect(r.zh.split('\n')).toEqual(['只要你在的話就沒有什麼不可能啊', '沒有啊', '月光', '無論如何'])
+    expect(r.roLines).toBe(4)
+  })
+
+  it('沒附羅馬拼音的歌，英文歌詞照樣留著', () => {
+    const r = splitLyrics('Oh baby\n君が好き\nI love you')
+    expect(r.jp.split('\n')).toEqual(['Oh baby', '君が好き', 'I love you'])
+    expect(r.roLines).toBe(0)
+  })
+
   it('簡體中文也認得', () => {
     expect(splitLyrics('这是我们的夏天').zhLines).toBe(1)
   })
