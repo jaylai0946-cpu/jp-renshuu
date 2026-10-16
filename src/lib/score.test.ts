@@ -254,6 +254,48 @@ describe('相似字', () => {
     expect(scoreCharacter('ね', trace('れ', small), SIZE, FINGER).confusedWith).toBe('れ')
   })
 
+  it('「わ」收尾沒有往內收（直直往下）：不給 ◎，指出第 2 筆的收尾（使用者回報的實際筆跡）', () => {
+    const px = 665
+    const ink = (pts: number[][]) => pts.map(([x, y]) => ({ x: x - 528, y: y - 345, pressure: 0.5 }))
+    const user = [
+      ink([[727, 530], [722, 620], [724, 700], [732, 820]]),
+      ink([[660, 608], [780, 578], [670, 718], [760, 672], [860, 632], [940, 622], [990, 640], [1020, 680], [1012, 750], [1015, 830], [1022, 895]]),
+    ]
+    for (const t of [PEN, FINGER]) {
+      const score = scoreCharacter('わ', user, px, t)
+      expect(score.verdict).toBe('shape')
+      expect(score.message).toContain('第 2 筆的收尾方向不對')
+      expect(score.problemStrokes).toContain(2)
+    }
+  })
+
+  it('收尾往外勾的「わ」說像「れ」；收尾對的「れ」「わ」照樣 ◎', () => {
+    const score = scoreCharacter('わ', trace('れ'), SIZE, PEN)
+    expect(score.verdict).not.toBe('ok')
+    expect(score.confusedWith).toBe('れ')
+    expect(scoreCharacter('わ', trace('わ'), SIZE, PEN).verdict).toBe('ok')
+    expect(scoreCharacter('れ', trace('れ'), SIZE, PEN).verdict).toBe('ok')
+  })
+
+  it('寫對但手抖、歪一點的字，不會因為收尾方向被冤枉', () => {
+    const rand = seeded(7)
+    const wrongly: string[] = []
+    for (const ch of Object.keys(STROKE_PATHS)) {
+      for (let r = 0; r < 5; r++) {
+        const dx = rand() * 8
+        const dy = rand() * 8
+        const score = scoreCharacter(
+          ch,
+          trace(ch, (p, i) => ({ x: p.x + dx + rand() * 3, y: p.y + dy + Math.sin(i / 3) * 1.5 + rand() * 3 })),
+          SIZE,
+          PEN,
+        )
+        if (score.message.includes('收尾')) wrongly.push(ch)
+      }
+    }
+    expect(wrongly).toEqual([])
+  })
+
   it('小字不跟自己的大字比（ゃ／や 是同一個字）', () => {
     const score = scoreCharacter('ゃ', trace('や'), SIZE, PEN)
     expect(score.confusedWith).not.toBe('や')

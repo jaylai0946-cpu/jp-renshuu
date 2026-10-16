@@ -19,6 +19,11 @@ export interface Thresholds {
   confuseStrong: number
   /** 近了這麼多但還不到 confuseStrong：本來 ◎ 的降成 △ 提醒一下 */
   confuseWeak: number
+  /**
+   * 收尾方向可以差幾度。只檢查「收尾決定是哪個字」的筆（わ／れ／ね 的第 2 筆、め／ぬ…）：
+   * 這些字其他地方幾乎一樣，平均距離被前面那一大段稀釋，收尾寫錯也會過
+   */
+  endTurn: number
 }
 
 /** Apple Pencil：有筆尖精度，可以稍微嚴一點 */
@@ -30,6 +35,7 @@ export const PEN: Thresholds = {
   // 寫對但很潦草的被誤判成 ✕ 在 2220 次裡最多 5 次（scripts 見 score.test.ts）
   confuseStrong: 3,
   confuseWeak: 1.5,
+  endTurn: 45,
 }
 
 /** 手指或滑鼠：接觸面積大、控制差，門檻放寬 */
@@ -40,6 +46,7 @@ export const FINGER: Thresholds = {
   // 手指抖得多，要差更多才敢說寫成別的字
   confuseStrong: 4,
   confuseWeak: 2,
+  endTurn: 55,
 }
 
 export function thresholdsFor(penOnly: boolean): Thresholds {

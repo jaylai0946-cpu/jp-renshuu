@@ -1,4 +1,4 @@
-import { distance, resample, type InkPoint, type Point } from './path'
+import { distance, polylineLength, resample, type InkPoint, type Point } from './path'
 import { KANJIVG_SIZE, SAMPLES_PER_STROKE, STROKE_PATHS, templateFor, toKanjiVGSpace } from './strokes'
 import { thresholdsFor, type Thresholds } from './thresholds'
 
@@ -109,6 +109,22 @@ export function scoreCharacter(
   }
   const lookalike = confused && confused.margin > thresholds.confuseWeak ? confused.ch : undefined
 
+  // 收尾決定是哪個字的筆，收尾方向要對
+  const ends = endProblems(ch, normalized, thresholds.endTurn)
+  if (ends.length) {
+    const marked = strokes.map((s, i) => (ends.some((e) => e.stroke === i) ? { ...s, verdict: 'shape' as const } : s))
+    const first = ends[0]
+    return {
+      verdict: 'shape',
+      strokes: marked,
+      expected,
+      actual,
+      message: `第 ${first.stroke + 1} 筆的收尾方向不對${first.like ? `，這樣收會像「${first.like}」` : ''}`,
+      problemStrokes: [...new Set([...problemStrokes, ...ends.map((e) => e.stroke + 1)])].sort((a, b) => a - b),
+      ...(first.like ? { confusedWith: first.like } : {}),
+    }
+  }
+
   if (problemStrokes.length) {
     return {
       verdict: 'shape',
@@ -217,6 +233,77 @@ function closestConfusable(
   }
   // own 只用來對齊筆數；逐筆分數已經在 scoreStroke 算過
   return own.length === user.length ? best : null
+}
+
+// ---- 收尾方向 ----
+
+/** 一筆最後一小段（約 15%）往哪個方向走，角度（度） */
+function endAngle(stroke: Point[]): number {
+  const a = stroke[Math.max(0, stroke.length - 6)]
+  const b = stroke[stroke.length - 1]
+  return (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI
+}
+
+function angleDiff(a: number, b: number): number {
+  const d = Math.abs(a - b) % 360
+  return d > 180 ? 360 - d : d
+}
+
+/** 兩個字的範本形狀差多少（對齊大小後），低於這個才算長得像 */
+const LOOKALIKE_MAX = 16
+/** 這麼長以上的筆才看收尾方向（KanjiVG 座標） */
+const MIN_KEY_LENGTH = 40
+
+interface KeyEnd {
+  stroke: number
+  angle: number
+  /** 收尾往別的方向就會變成的字，和那個字這一筆的收尾角度 */
+  others: { ch: string; angle: number }[]
+}
+const keyEndCache = new Map<string, KeyEnd[]>()
+
+/**
+ * 哪幾筆的收尾是「跟長得像的字分辨」的關鍵：
+ * 同筆數、整體形狀很像（わ／れ），但這一筆收尾方向差 90° 以上。
+ */
+function keyEnds(ch: string): KeyEnd[] {
+  const cached = keyEndCache.get(ch)
+  if (cached) return cached
+  const own = templateFor(ch)
+  const ownN = normalTemplate(ch)
+  const byStroke = new Map<number, KeyEnd>()
+  for (const c of confusablesOf(ch)) {
+    const other = templateFor(c)
+    const otherN = normalTemplate(c)
+    const d = ownN.reduce((n, ts, i) => n + meanDistance(otherN[i], ts), 0) / ownN.length
+    if (d > LOOKALIKE_MAX) continue
+    own.forEach((ts, i) => {
+      // 短短一點的筆（ら、ち 的第 1 筆）收尾方向抖一下就變，看不出來
+      if (polylineLength(ts) < MIN_KEY_LENGTH) return
+      const mine = endAngle(ts)
+      const theirs = endAngle(other[i])
+      if (angleDiff(mine, theirs) <= 90) return
+      const entry = byStroke.get(i) ?? { stroke: i, angle: mine, others: [] }
+      entry.others.push({ ch: c, angle: theirs })
+      byStroke.set(i, entry)
+    })
+  }
+  const list = [...byStroke.values()].sort((a, b) => a.stroke - b.stroke)
+  keyEndCache.set(ch, list)
+  return list
+}
+
+/** 關鍵筆的收尾方向偏太多的筆，順便找出這樣收比較像哪個字 */
+function endProblems(ch: string, user: Point[][], tolerance: number): { stroke: number; like?: string }[] {
+  const out: { stroke: number; like?: string }[] = []
+  for (const k of keyEnds(ch)) {
+    const got = endAngle(user[k.stroke])
+    const off = angleDiff(got, k.angle)
+    if (off <= tolerance) continue
+    const nearest = k.others.reduce((a, b) => (angleDiff(got, b.angle) < angleDiff(got, a.angle) ? b : a))
+    out.push({ stroke: k.stroke, like: angleDiff(got, nearest.angle) < off ? nearest.ch : undefined })
+  }
+  return out
 }
 
 function scoreStroke(user: Point[], template: Point[], t: Thresholds): StrokeScore {
