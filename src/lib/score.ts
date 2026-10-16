@@ -251,6 +251,8 @@ function angleDiff(a: number, b: number): number {
 
 /** 兩個字的範本形狀差多少（對齊大小後），低於這個才算長得像 */
 const LOOKALIKE_MAX = 16
+/** 收尾可以偏到和相似字之間角度的幾成 */
+const END_GAP_SHARE = 0.4
 /** 這麼長以上的筆才看收尾方向（KanjiVG 座標） */
 const MIN_KEY_LENGTH = 40
 
@@ -299,7 +301,9 @@ function endProblems(ch: string, user: Point[][], tolerance: number): { stroke: 
   for (const k of keyEnds(ch)) {
     const got = endAngle(user[k.stroke])
     const off = angleDiff(got, k.angle)
-    if (off <= tolerance) continue
+    // 跟最像的字收尾只差一百多度的（わ 143° vs れ 26°），中間那段（直直往下）兩邊都不算對
+    const gap = Math.min(...k.others.map((o) => angleDiff(k.angle, o.angle)))
+    if (off <= Math.min(tolerance, gap * END_GAP_SHARE)) continue
     const nearest = k.others.reduce((a, b) => (angleDiff(got, b.angle) < angleDiff(got, a.angle) ? b : a))
     out.push({ stroke: k.stroke, like: angleDiff(got, nearest.angle) < off ? nearest.ch : undefined })
   }

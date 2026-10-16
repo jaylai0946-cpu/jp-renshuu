@@ -269,6 +269,18 @@ describe('相似字', () => {
     }
   })
 
+  it('描寫模式照著範本寫、只有收尾直直往下的「わ」也抓得到（第二次回報的筆跡）', () => {
+    const px = 665
+    const ink = (pts: number[][]) => pts.map(([x, y]) => ({ x: x - 528, y: y - 363, pressure: 0.5 }))
+    const user = [
+      ink([[757, 440], [770, 520], [772, 640], [765, 800], [755, 955]]),
+      ink([[660, 628], [810, 572], [700, 720], [628, 830], [780, 735], [860, 690], [960, 650], [1030, 650], [1062, 700], [1062, 820], [1062, 925]]),
+    ]
+    for (const t of [PEN, FINGER]) {
+      expect(scoreCharacter('わ', user, px, t).message).toContain('第 2 筆的收尾方向不對')
+    }
+  })
+
   it('收尾往外勾的「わ」說像「れ」；收尾對的「れ」「わ」照樣 ◎', () => {
     const score = scoreCharacter('わ', trace('れ'), SIZE, PEN)
     expect(score.verdict).not.toBe('ok')
