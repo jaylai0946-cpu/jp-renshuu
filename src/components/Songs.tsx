@@ -282,7 +282,7 @@ function AddSong({
             autoComplete="off"
           />
 
-          <label htmlFor="song-lyrics">歌詞（一句一行，日文／羅馬拼音／中文混著貼也可以）</label>
+          <label htmlFor="song-lyrics">歌詞（一句一行，日文／平假名讀音／羅馬拼音／中文混著貼也可以）</label>
           <textarea
             id="song-lyrics"
             lang="ja"
@@ -298,7 +298,7 @@ function AddSong({
             <p className="muted small" style={{ margin: 0 }}>
               {[
                 split.zhLines ? `${split.zhLines} 行中文會當成翻譯` : '',
-                split.roLines ? `${split.roLines} 行羅馬拼音會略過` : '',
+                split.roLines ? `${split.roLines} 行讀音或羅馬拼音會略過` : '',
               ]
                 .filter(Boolean)
                 .join('、')}

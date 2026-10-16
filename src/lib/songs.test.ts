@@ -186,6 +186,40 @@ describe('splitLyrics', () => {
     expect(r.roLines).toBe(4)
   })
 
+  it('日文／平假名讀音／羅馬拼音／中文 四行一組：只留日文，讀音和拼音略過，中文當翻譯', () => {
+    const r = splitLyrics(
+      [
+        '青い空を見上げて',
+        'あおいそらをみあげて',
+        'aoi sora wo miagete？',
+        '抬頭望著藍天',
+        '',
+        'ガラスの窓を開けて',
+        'がらすのまどをあけて',
+        'garasu no mado wo akete！',
+        '打開玻璃窗',
+        '',
+        'そうだね',
+        'そうだね',
+        'sou da ne',
+        '是啊',
+        '',
+        '月光',
+        'げっこう',
+        'gekkō',
+        '月光',
+      ].join('\n'),
+    )
+    expect(r.jp.split('\n')).toEqual(['青い空を見上げて', 'ガラスの窓を開けて', 'そうだね', '月光'])
+    expect(r.zh.split('\n')).toEqual(['抬頭望著藍天', '打開玻璃窗', '是啊', '月光'])
+    expect(r.roLines).toBe(8)
+  })
+
+  it('連著兩句都是假名的歌詞不會被當成讀音丟掉', () => {
+    const r = splitLyrics('さよなら\nまたあした\n君に会いたい\nきみにあいたい')
+    expect(r.jp.split('\n')).toEqual(['さよなら', 'またあした', '君に会いたい'])
+  })
+
   it('沒附羅馬拼音的歌，英文歌詞照樣留著', () => {
     const r = splitLyrics('Oh baby\n君が好き\nI love you')
     expect(r.jp.split('\n')).toEqual(['Oh baby', '君が好き', 'I love you'])

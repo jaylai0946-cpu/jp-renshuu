@@ -8,62 +8,112 @@ export const SONG_MAX_ZH_CHARS = 8000
 
 const KANA = /[\u3041-\u3096\u30a1-\u30fa]/
 const HAN = /[\u3400-\u4dbf\u4e00-\u9fff]/
-/** 羅馬拼音或英文：只有拉丁字母、數字、標點（含 ō、ū 這類長音符號） */
-const LATIN = /^[\x20-\x7e\u00c0-\u017f\u2019\u2018]+$/
+const LATIN_LETTER = /[A-Za-z\u00c0-\u017f]/
 /** 日文幾乎不會用、中文歌詞很常見的字（繁簡都放） */
 const CHINESE_ONLY = /[的了們们這这嗎吗麼么著着沒没說说會你妳她吧呢啊哦讓让給给從从为对个]/
 
-type Row = 'jp' | 'latin' | 'han' | 'zh'
+type Row = 'jp' | 'kana' | 'latin' | 'han' | 'zh' | 'none'
+
+function rowKind(line: string): Row {
+  const kana = KANA.test(line)
+  const han = HAN.test(line)
+  if (kana) return han ? 'jp' : 'kana'
+  if (han) return CHINESE_ONLY.test(line) ? 'zh' : 'han'
+  // 沒有假名、漢字：有拉丁字母就是羅馬拼音或英文（全形的？！也算，標點不影響）
+  return LATIN_LETTER.test(line) ? 'latin' : 'none'
+}
+
+/** 只留假名，片假名換成平假名，拿掉長音和標點，用來比讀音 */
+function kanaOf(line: string): string {
+  return [...line]
+    .map((c) => {
+      const code = c.codePointAt(0) ?? 0
+      return code >= 0x30a1 && code <= 0x30f6 ? String.fromCodePoint(code - 0x60) : c
+    })
+    .filter((c) => /[\u3041-\u3096]/.test(c))
+    .join('')
+}
 
 /**
- * 從歌詞網站複製時常常是「日文／羅馬拼音／中文」一行一行交錯。
- * 日文行拿去分析，中文行當翻譯參考，羅馬拼音丟掉（分析時會重新標）。
+ * reading 是不是 original 的平假名讀音（歌詞網站常在日文下面附一行）。
+ * 原文裡的假名照順序都會出現在讀音裡、讀音比較長；原文沒有漢字的話兩行要一樣。
+ */
+function isReadingOf(original: string, reading: string): boolean {
+  const src = kanaOf(original)
+  const read = kanaOf(reading)
+  if (!read) return false
+  if (!HAN.test(original)) return src === read
+  // 每個漢字至少讀一個假名、最多五個左右；差太多就不是這行的讀音
+  const kanji = [...original].filter((c) => HAN.test(c)).length
+  if (read.length < src.length + kanji || read.length > src.length + kanji * 5) return false
+  let i = 0
+  for (const c of read) if (c === src[i]) i++
+  return i === src.length
+}
+
+/**
+ * 從歌詞網站複製時常常是一組一組交錯：
  *
- * - 有假名的一定是日文
- * - 只有拉丁字母的：大部分日文行後面都跟著一行的話，就是那首歌附的羅馬拼音；
+ *   日文（漢字假名混寫）
+ *   平假名讀音（可能沒有）
+ *   羅馬拼音（可能沒有）
+ *   中文翻譯（可能沒有）
+ *
+ * 日文行拿去分析，中文行當翻譯參考，讀音和羅馬拼音丟掉（分析時會重新標）。
+ *
+ * - 有漢字又有假名的是日文
+ * - 只有假名的：緊接在日文後面、而且是那行的讀音，就是讀音；不然是日文歌詞（そうなんだ）
+ * - 只有拉丁字母的（全形？！也算）：大部分日文行後面都跟著一行的話是那首歌附的羅馬拼音，
  *   不然當成歌詞本身的英文
  * - 沒假名、有中文才有的字（的、了、們…）是中文
- * - 只有漢字、看不出來的（「月光」「無論如何」）看位置：後面跟著羅馬拼音的是日文；
- *   整首是交錯貼的話，緊接在日文或羅馬拼音後面的是中文翻譯；其他當日文
+ * - 只有漢字、看不出來的（「月光」「無論如何」）看位置：後面跟著讀音或羅馬拼音的是日文；
+ *   整首是交錯貼的話，緊接在日文、讀音、羅馬拼音後面的是中文翻譯；其他當日文
  */
 export function splitLyrics(text: string): { jp: string; zh: string; zhLines: number; roLines: number } {
   const rows = text
     .split(/\r?\n/)
     .map((l) => l.trim())
     .filter(Boolean)
-  const kinds: Row[] = rows.map((line) =>
-    KANA.test(line)
-      ? 'jp'
-      : LATIN.test(line)
-        ? 'latin'
-        : !HAN.test(line)
-          ? 'jp'
-          : CHINESE_ONLY.test(line)
-            ? 'zh'
-            : 'han',
-  )
+    .filter((l) => rowKind(l) !== 'none')
+  const kinds = rows.map(rowKind)
+  const japanese = (k: Row) => k === 'jp' || k === 'kana' || k === 'han'
 
-  const japanese = kinds.filter((k) => k === 'jp' || k === 'han').length
-  const followedByLatin = kinds.filter((k, i) => (k === 'jp' || k === 'han') && kinds[i + 1] === 'latin').length
-  const romajiMode = followedByLatin >= 2 && followedByLatin >= japanese * 0.5
+  // 羅馬拼音模式：日文行後面（中間可能隔一行讀音）大多跟著拉丁字母行
+  const readingAfter = (i: number) => kinds[i + 1] === 'kana' && isReadingOf(rows[i], rows[i + 1])
+  let followed = 0
+  let jpCount = 0
+  for (let i = 0; i < rows.length; i++) {
+    if (!japanese(kinds[i])) continue
+    jpCount++
+    const reading = readingAfter(i)
+    if (kinds[i + (reading ? 2 : 1)] === 'latin') followed++
+    if (reading) i++ // 讀音那行不算一句
+  }
+  const romajiMode = followed >= 2 && followed >= jpCount * 0.4
   const zhCount = kinds.filter((k) => k === 'zh').length
-  const zhMode = zhCount >= 2 && zhCount >= kinds.filter((k) => k === 'jp').length * 0.3
+  // 讀音行不算；只有漢字的行可能是日文也可能是中文，先都算日文，門檻放低一點
+  const zhMode = zhCount >= 2 && zhCount >= jpCount * 0.25
 
   const jp: string[] = []
   const zh: string[] = []
   let roLines = 0
-  let prev: 'jp' | 'ro' | 'zh' | null = null
+  let prev: 'jp' | 'read' | 'ro' | 'zh' | null = null
+  let prevJp = ''
   rows.forEach((line, i) => {
-    let kind: 'jp' | 'ro' | 'zh'
     const k = kinds[i]
+    let kind: 'jp' | 'read' | 'ro' | 'zh'
     if (k === 'jp') kind = 'jp'
     else if (k === 'zh') kind = 'zh'
-    else if (k === 'latin') kind = romajiMode && prev === 'jp' ? 'ro' : 'jp'
+    else if (k === 'kana') kind = prev === 'jp' && isReadingOf(prevJp, line) ? 'read' : 'jp'
+    else if (k === 'latin') kind = romajiMode && (prev === 'jp' || prev === 'read') ? 'ro' : 'jp'
+    else if (readingAfter(i)) kind = 'jp'
     else if (romajiMode && kinds[i + 1] === 'latin') kind = 'jp'
-    else kind = zhMode && (prev === 'jp' || prev === 'ro') ? 'zh' : 'jp'
+    else kind = zhMode && (prev === 'jp' || prev === 'read' || prev === 'ro') ? 'zh' : 'jp'
 
-    if (kind === 'jp') jp.push(line)
-    else if (kind === 'zh') zh.push(line)
+    if (kind === 'jp') {
+      jp.push(line)
+      prevJp = line
+    } else if (kind === 'zh') zh.push(line)
     else roLines++
     prev = kind
   })

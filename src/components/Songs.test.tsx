@@ -154,7 +154,7 @@ describe('歌曲', () => {
         value: '青い空を見上げて\naoi sora wo miagete\n抬頭望著藍天\n\n君と歩いた道\nkimi to aruita michi\n和你走過的路',
       },
     })
-    expect(screen.getByText(/2 行中文會當成翻譯、2 行羅馬拼音會略過/)).toBeInTheDocument()
+    expect(screen.getByText(/2 行中文會當成翻譯、2 行讀音或羅馬拼音會略過/)).toBeInTheDocument()
     expect(screen.getByText(/日文 2 \/ 100 句/)).toBeInTheDocument()
     expect(screen.queryByLabelText(/中文歌詞/)).toBeNull()
     await act(async () => {
