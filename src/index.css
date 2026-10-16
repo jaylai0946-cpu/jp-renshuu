@@ -900,7 +900,7 @@ h3 {
   vertical-align: 4px;
 }
 
-/* 大字卡：一個假名或兩個（拗音） */
+/* 大字卡：一個假名，或拗音兩個字放在同一格 */
 .cells {
   display: flex;
   justify-content: center;
@@ -921,11 +921,10 @@ h3 {
   font-size: 116px;
   line-height: 1;
 }
-.cells.two .cell {
-  width: 140px;
-  height: 160px;
-  font-size: 88px;
-  border-radius: 28px;
+.cell.two {
+  width: 260px;
+  font-size: 104px;
+  letter-spacing: -0.04em;
 }
 
 .wordbox {
@@ -2620,10 +2619,9 @@ select {
     border-radius: 36px;
     font-size: 150px;
   }
-  .cells.two .cell {
-    width: 190px;
-    height: 210px;
-    font-size: 120px;
+  .cell.two {
+    width: 340px;
+    font-size: 136px;
   }
   .kbd {
     display: inline-block;
