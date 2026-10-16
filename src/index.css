@@ -24,6 +24,11 @@
   --ui: 'Noto Sans TC', 'PingFang TC', 'Microsoft JhengHei', system-ui, sans-serif;
   --jp: 'Zen Maru Gothic', 'Hiragino Maru Gothic ProN', 'Hiragino Sans', 'Yu Gothic', sans-serif;
   --num: 'Fredoka', var(--ui);
+  /*
+   * 教科書體。學寫字的地方（手寫頁的字、選字格、新字卡）用它：
+   * 圓體把「り」「さ」「き」寫成連筆，跟筆順動畫（KanjiVG，教科書的分開寫法）對不起來
+   */
+  --kyoka: 'Klee One', var(--jp);
   --press: 80ms;
   box-sizing: border-box;
 }
@@ -916,8 +921,8 @@ h3 {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: var(--jp);
-  font-weight: 700;
+  font-family: var(--kyoka);
+  font-weight: 600;
   font-size: 116px;
   line-height: 1;
 }
@@ -1442,9 +1447,9 @@ h3 {
   align-items: center;
 }
 .whead-mid .ch {
-  font-family: var(--jp);
+  font-family: var(--kyoka);
   font-size: 30px;
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1.2;
 }
 .whead-mid .ch .ro {
@@ -2453,8 +2458,8 @@ select {
     border-radius: 12px;
     border: 2px solid var(--edge);
     background: var(--surface);
-    font-family: var(--jp);
-    font-weight: 700;
+    font-family: var(--kyoka);
+    font-weight: 600;
     font-size: 20px;
     padding: 0;
   }
