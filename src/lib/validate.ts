@@ -63,6 +63,7 @@ function settings(raw: unknown): Settings {
     batchSize: int(r.batchSize, DEFAULT_SETTINGS.batchSize, 1, 20),
     haptics: bool(r.haptics, DEFAULT_SETTINGS.haptics),
     theme: r.theme === 'light' || r.theme === 'dark' || r.theme === 'auto' ? r.theme : DEFAULT_SETTINGS.theme,
+    motion: r.motion === 'game' || r.motion === 'classic' ? r.motion : DEFAULT_SETTINGS.motion,
   }
 }
 

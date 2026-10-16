@@ -25,6 +25,7 @@ import { ymd } from './lib/dates'
 import { vibrate } from './lib/haptics'
 import { markKnownPatch, nextNew, streak, todayCounts } from './lib/srs'
 import { applyTheme } from './lib/theme'
+import { GameMotion, applyMotion } from './lib/motion'
 import { Icon, StreakPill, SyncDot, XpPill } from './components/ui'
 import { generateKey, loadLocalOnly, parseSetupLink, saveLocalOnly } from './lib/sync'
 import { syncStatusText } from './lib/syncStatus'
@@ -49,6 +50,11 @@ export default function App() {
   // 外觀跟著設定走。同步帶進別台的設定也會在這裡生效
   const theme = state.settings.theme
   useEffect(() => applyTheme(theme), [theme])
+
+  // 動畫效果：預設原本的樣子，設定選「遊戲化」才開
+  const motion = state.settings.motion
+  const game = motion === 'game'
+  useEffect(() => applyMotion(motion), [motion])
 
   // 跨午夜還開著時，日期要跟著跳，不然「今天」會停在昨天
   useEffect(() => {
@@ -175,6 +181,7 @@ export default function App() {
   // ---- 練習回合是專注模式，沒有導覽 ----
   if (round.round) {
     return (
+      <GameMotion.Provider value={game}>
       <Round
         round={round.round}
         state={state}
@@ -186,11 +193,13 @@ export default function App() {
         onQuit={round.quit}
         onSay={round.replay}
       />
+      </GameMotion.Provider>
     )
   }
 
   if (round.summary) {
     return (
+      <GameMotion.Provider value={game}>
       <div className="focus">
         <Summary
           summary={round.summary}
@@ -198,6 +207,7 @@ export default function App() {
           onHome={() => go('home')}
         />
       </div>
+      </GameMotion.Provider>
     )
   }
 
@@ -215,6 +225,7 @@ export default function App() {
   }
 
   return (
+    <GameMotion.Provider value={game}>
     <div className="shell">
       <aside className="side">
         <div className="side-brand">
@@ -314,5 +325,6 @@ export default function App() {
         {view === 'about' ? <About onBack={() => go('stats')} /> : null}
       </main>
     </div>
+    </GameMotion.Provider>
   )
 }

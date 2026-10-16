@@ -57,6 +57,9 @@ export interface DayHist {
 /** 外觀。auto 跟著系統的深色模式 */
 export type Theme = 'auto' | 'light' | 'dark'
 
+/** 動畫效果。classic 是原本的樣子；game 加上滾動數字、彈跳回饋、分頁滑動 */
+export type MotionStyle = 'classic' | 'game'
+
 export interface Settings {
   newPerDay: number
   romaji: boolean
@@ -70,6 +73,7 @@ export interface Settings {
   /** 答對時小震一下。iPad 沒有馬達，開了也不會震 */
   haptics: boolean
   theme: Theme
+  motion: MotionStyle
 }
 
 /** 歌詞裡一個值得學的詞 */

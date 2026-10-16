@@ -310,6 +310,7 @@ describe('App', () => {
   describe('外觀設定', () => {
     afterEach(() => {
       delete document.documentElement.dataset.theme
+      delete document.documentElement.dataset.motion
     })
 
     it('預設自動：不設 data-theme，交給系統', () => {
@@ -333,6 +334,21 @@ describe('App', () => {
       fireEvent.click(screen.getByRole('button', { name: '自動' }))
       expect(document.documentElement.dataset.theme).toBeUndefined()
       expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!).settings.theme).toBe('auto')
+    })
+
+    it('動畫效果預設是原本的樣子；選遊戲化才設 data-motion，存進設定', () => {
+      render(<App />)
+      fireEvent.click(screen.getByRole('button', { name: /紀錄/ }))
+      expect(screen.getByRole('button', { name: '原本' })).toHaveAttribute('aria-pressed', 'true')
+      expect(document.documentElement.dataset.motion).toBeUndefined()
+
+      fireEvent.click(screen.getByRole('button', { name: '遊戲化' }))
+      expect(document.documentElement.dataset.motion).toBe('game')
+      expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!).settings.motion).toBe('game')
+
+      fireEvent.click(screen.getByRole('button', { name: '原本' }))
+      expect(document.documentElement.dataset.motion).toBeUndefined()
+      expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!).settings.motion).toBe('classic')
     })
 
     it('重新整理後記得選過的外觀', () => {

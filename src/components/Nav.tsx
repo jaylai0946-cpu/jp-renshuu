@@ -1,4 +1,5 @@
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useContext, useLayoutEffect, useRef, useState } from 'react'
+import { GameMotion } from '../lib/motion'
 
 export type TabId = 'home' | 'units' | 'write' | 'compose' | 'songs' | 'stats'
 
@@ -27,6 +28,7 @@ interface Box {
  * 視窗大小一變就重量一次。沒有選中任何分頁（例如「關於」頁）就收起來。
  */
 export function Nav({ view, onGo }: { view: string; onGo: (tab: TabId) => void }) {
+  const game = useContext(GameMotion)
   const wrapRef = useRef<HTMLDivElement>(null)
   const [box, setBox] = useState<Box | null>(null)
   // 第一次出現直接放到位，不要從左上角滑過來
@@ -34,7 +36,11 @@ export function Nav({ view, onGo }: { view: string; onGo: (tab: TabId) => void }
 
   useLayoutEffect(() => {
     const wrap = wrapRef.current
-    if (!wrap) return
+    // 原本的樣子：選中的那格自己畫紅底，不用滑動方塊
+    if (!wrap || !game) {
+      setBox(null)
+      return
+    }
     function measure() {
       const g = wrap!.querySelector<HTMLElement>('button[aria-current="page"] .g')
       if (!g) {
@@ -55,7 +61,7 @@ export function Nav({ view, onGo }: { view: string; onGo: (tab: TabId) => void }
     const ro = new ResizeObserver(measure)
     ro.observe(wrap)
     return () => ro.disconnect()
-  }, [view])
+  }, [view, game])
 
   useLayoutEffect(() => {
     if (!box || !instant) return

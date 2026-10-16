@@ -19,7 +19,14 @@ export const DEFAULT_SETTINGS = {
   batchSize: 5,
   haptics: true,
   theme: 'auto',
+  /** 預設維持原本的樣子；遊戲化動畫要自己到設定打開 */
+  motion: 'classic',
 } as const
+
+export const MOTION_CHOICES = [
+  { id: 'classic', label: '原本' },
+  { id: 'game', label: '遊戲化' },
+] as const
 
 export const THEME_CHOICES = [
   { id: 'auto', label: '自動' },

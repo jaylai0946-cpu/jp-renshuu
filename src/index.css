@@ -2764,6 +2764,8 @@ select {
 
 /* ===================================================================== */
 /* 動畫（遊戲化回饋）                                                       */
+/* 選配：設定選「遊戲化」才開（<html data-motion="game">），預設是原本的樣子    */
+/* 字卡是新功能，翻面動畫一直都有                                             */
 /* 全部 150–300ms，只動 transform / opacity（進度條是 12px 高的小條，用 width） */
 /* 「減少動態效果」時在最後統一關掉                                           */
 /* ===================================================================== */
@@ -2802,10 +2804,10 @@ select {
 }
 
 /* ---- 進度條 ---- */
-.bar i {
+:root[data-motion='game'] .bar i {
   transition: width 300ms var(--ease-out);
 }
-.prog i {
+:root[data-motion='game'] .prog i {
   transition: width 280ms var(--ease-out);
 }
 
@@ -2839,16 +2841,16 @@ select {
     transform: translateX(3px);
   }
 }
-.choice.right {
+:root[data-motion='game'] .choice.right {
   animation: pop 240ms var(--ease-spring);
 }
-.choice.wrong {
+:root[data-motion='game'] .choice.wrong {
   animation: shake 300ms ease-in-out;
 }
-.wresult.good {
+:root[data-motion='game'] .wresult.good {
   animation: pop 240ms var(--ease-spring);
 }
-.wresult.bad {
+:root[data-motion='game'] .wresult.bad {
   animation: shake 300ms ease-in-out;
 }
 
@@ -3010,16 +3012,16 @@ select {
 
 @media (prefers-reduced-motion: reduce) {
   .anum-d::after,
-  .bar i,
-  .prog i,
+  :root[data-motion='game'] .bar i,
+  :root[data-motion='game'] .prog i,
   .fcard-in,
   .nav-ind {
     transition: none;
   }
-  .choice.right,
-  .choice.wrong,
-  .wresult.good,
-  .wresult.bad,
+  :root[data-motion='game'] .choice.right,
+  :root[data-motion='game'] .choice.wrong,
+  :root[data-motion='game'] .wresult.good,
+  :root[data-motion='game'] .wresult.bad,
   .fcard.enter-next,
   .fcard.enter-prev {
     animation: none;

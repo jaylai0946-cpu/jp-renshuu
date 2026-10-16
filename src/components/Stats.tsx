@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { BATCH_SIZE_CHOICES, NEW_PER_DAY_CHOICES, THEME_CHOICES, WRITE_PER_DAY_CHOICES } from '../constants'
+import { BATCH_SIZE_CHOICES, MOTION_CHOICES, NEW_PER_DAY_CHOICES, THEME_CHOICES, WRITE_PER_DAY_CHOICES } from '../constants'
 import { ITEMS } from '../data/units'
 import { addDays } from '../lib/dates'
 import { importLegacy } from '../lib/legacyImport'
@@ -162,6 +162,24 @@ export function Stats({ state, today, sync, streak, xp, onSetting, onReplaceStat
                   onClick={() => onSetting('theme', t.id)}
                 >
                   {t.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="set">
+            <span>
+              動畫效果
+              <small>遊戲化 = 數字滾動、答題彈跳、分頁滑動</small>
+            </span>
+            <div className="seg sm" role="group" aria-label="動畫效果">
+              {MOTION_CHOICES.map((m) => (
+                <button
+                  type="button"
+                  key={m.id}
+                  aria-pressed={state.settings.motion === m.id}
+                  onClick={() => onSetting('motion', m.id)}
+                >
+                  {m.label}
                 </button>
               ))}
             </div>

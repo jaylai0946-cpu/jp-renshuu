@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import { bump, prefersReducedMotion } from '../lib/motion'
+import { useContext, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { GameMotion, bump, prefersReducedMotion } from '../lib/motion'
 
 /*
  * A 版設計的共用小元件：線條圖示、膠囊、單元色塊。
@@ -123,7 +123,11 @@ export function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
  * 位數從右邊算 key，9 → 10 時個位數那條會滑、十位數那條新長出來。
  */
 export function AnimatedNumber({ value }: { value: number }) {
-  const digits = [...String(Math.max(0, Math.round(value)))]
+  const game = useContext(GameMotion)
+  const text = String(Math.max(0, Math.round(value)))
+  // 原本的樣子就是單純的數字
+  if (!game) return <>{text}</>
+  const digits = [...text]
   return (
     <span className="anum">
       {digits.map((d, i) => (
@@ -212,7 +216,9 @@ export function Tile({
  * 帶墨框的進度條。第一次出現時從 0 滑到目前的值，之後數值變了也平滑地滑過去。
  */
 export function Bar({ parts, label, thin }: { parts: { pct: number; color: string }[]; label?: string; thin?: boolean }) {
-  const [shown, setShown] = useState(prefersReducedMotion)
+  const game = useContext(GameMotion)
+  // 原本的樣子直接畫到位；遊戲化才從 0 滑進來
+  const [shown, setShown] = useState(() => !game || prefersReducedMotion())
   useEffect(() => {
     if (shown) return
     // 先畫一次 0，下一個畫格再給真的值，transition 才有起點

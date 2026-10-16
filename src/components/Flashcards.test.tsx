@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { UNIT_BY_ID } from '../data/units'
 import { Flashcards } from './Flashcards'
+import { GameMotion } from '../lib/motion'
 import { AnimatedNumber } from './ui'
 
 describe('字卡', () => {
@@ -65,12 +66,23 @@ describe('字卡', () => {
 })
 
 describe('滾動數字', () => {
-  it('文字還是乾淨的數字，每一位數帶自己的位置', () => {
-    const { container, rerender } = render(<AnimatedNumber value={1234} />)
+  it('預設（原本的樣子）就是單純的數字', () => {
+    const { container } = render(<AnimatedNumber value={1234} />)
+    expect(container.textContent).toBe('1234')
+    expect(container.querySelector('.anum-d')).toBeNull()
+  })
+
+  it('遊戲化：文字還是乾淨的數字，每一位數帶自己的位置', () => {
+    const wrap = (v: number) => (
+      <GameMotion.Provider value>
+        <AnimatedNumber value={v} />
+      </GameMotion.Provider>
+    )
+    const { container, rerender } = render(wrap(1234))
     expect(container.textContent).toBe('1234')
     const ds = [...container.querySelectorAll<HTMLElement>('.anum-d')]
     expect(ds.map((d) => d.style.getPropertyValue('--d'))).toEqual(['1', '2', '3', '4'])
-    rerender(<AnimatedNumber value={1240} />)
+    rerender(wrap(1240))
     expect(container.textContent).toBe('1240')
   })
 })
