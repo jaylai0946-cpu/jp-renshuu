@@ -180,22 +180,19 @@ export function Round({ round, state, onLearn, onAnswer, onWrite, onNext, onSkip
           </h1>
           <div className="romaji">{item.ro}</div>
           <div className="padstack">
-            <WritingPad key={entry.id} text={text} mode="blind" penOnly={state.settings.penOnly} onJudged={onWrite} />
+            {/* 寫完的「下一個」就在結果旁邊，不用到畫面最底下找 */}
+            <WritingPad
+              key={entry.id}
+              text={text}
+              mode="blind"
+              penOnly={state.settings.penOnly}
+              onJudged={onWrite}
+              onNext={onNext}
+              nextAlways
+            />
           </div>
-          {skip}
+          {round.answered ? null : skip}
         </div>
-        {round.answered ? (
-          <>
-            <div className="feedback-spacer" />
-            <div className="feedback" role="status">
-              <div className="in">
-                <button type="button" className="btn btn-ink" onClick={onNext} aria-label="繼續">
-                  繼續<span className="d-only">　Enter ↵</span>
-                </button>
-              </div>
-            </div>
-          </>
-        ) : null}
       </div>
     )
   }

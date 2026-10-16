@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../App'
 import { STORAGE_KEY } from '../constants'
+import { UNIT_BY_ID } from '../data/units'
 import { emptyState } from '../lib/storage'
 import { KANJIVG_SIZE, outlineFor } from '../lib/strokes'
 import type { AppState } from '../types'
@@ -160,6 +161,32 @@ describe('手寫分頁', () => {
     expect(screen.getByText(/第 1 \/ 46 個/)).toBeInTheDocument()
     expect(screen.getByText('已寫 0 / 3 筆')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '重來' })).toBeNull()
+  })
+
+  it('每日練習的默寫題：寫錯也有「下一個」，就在結果旁邊；按了換下一題', () => {
+    seed((s) => {
+      s.settings.newPerDay = 0
+      s.settings.writePerDay = 3
+      for (const it of UNIT_BY_ID['h1'].items) s.items[it.id] = { b: 3, due: '2030-01-01', seen: 3, wrong: 0 }
+    })
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: '開始今日練習' }))
+    expect(screen.getByText('憑記憶寫出來')).toBeInTheDocument()
+
+    // 一筆一筆亂畫到判分為止（每個字筆畫數不同）
+    const canvas = screen.getByLabelText('手寫區')
+    for (let id = 1; id <= 6 && !screen.queryByText('寫錯了'); id++) {
+      fireEvent.pointerDown(canvas, { pointerId: id, pointerType: 'pen', clientX: 5, clientY: 5 })
+      fireEvent.pointerMove(canvas, { pointerId: id, pointerType: 'pen', clientX: 15, clientY: 6 })
+      fireEvent.pointerUp(canvas, { pointerId: id, pointerType: 'pen', clientX: 15, clientY: 6 })
+    }
+    expect(screen.getByText('寫錯了')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '重來' })).toBeInTheDocument()
+    // 底下那條「繼續」列拿掉了
+    expect(screen.queryByRole('button', { name: '繼續' })).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: /^下一個/ }))
+    expect(screen.getByText(/第 2 \/ 3 題/)).toBeInTheDocument()
   })
 
   it('寫完後工具列收起來，結果列取代它', () => {

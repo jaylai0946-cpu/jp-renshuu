@@ -26,9 +26,14 @@ export interface WritingPadProps {
   actions?: ReactNode
   /**
    * 有給的話，寫完判分後工具列換成結果列：寫對出現「下一個」、寫錯出現「重來」，
-   * 形狀偏了兩顆都給。手寫分頁用；每日練習的默寫題由回合自己的「繼續」接手，不給
+   * 形狀偏了兩顆都給
    */
   onNext?: () => void
+  /**
+   * 寫錯也給「下一個」（附 Enter 提示）。練習回合用：分數已經記了，不能卡在重來；
+   * 重來只是再練一次，不會重新計分
+   */
+  nextAlways?: boolean
 }
 
 interface CellState {
@@ -59,6 +64,7 @@ export function WritingPad({
   onPenOnlyBlocked,
   actions,
   onNext,
+  nextAlways = false,
 }: WritingPadProps) {
   const chars = useMemo(() => [...text], [text])
   const [cells, setCells] = useState<CellState[]>(() => chars.map(emptyCell))
@@ -220,9 +226,10 @@ export function WritingPad({
                   重來
                 </button>
               ) : null}
-              {overall !== 'bad' ? (
-                <button type="button" className="btn btn-green" onClick={onNext}>
+              {overall !== 'bad' || nextAlways ? (
+                <button type="button" className={`btn ${overall === 'bad' ? '' : 'btn-green'}`} onClick={onNext}>
                   下一個
+                  {nextAlways ? <span className="d-only">　Enter ↵</span> : null}
                 </button>
               ) : null}
             </div>
