@@ -30,6 +30,6 @@ export function bump(el: Element | null, scale = 1.12): void {
   if (!el || !gameOn() || prefersReducedMotion() || typeof (el as HTMLElement).animate !== 'function') return
   ;(el as HTMLElement).animate(
     [{ transform: 'scale(1)' }, { transform: `scale(${scale})` }, { transform: 'scale(1)' }],
-    { duration: 260, easing: 'cubic-bezier(0.3, 1.4, 0.6, 1)' },
+    { duration: 380, easing: 'cubic-bezier(0.3, 1.4, 0.6, 1)' },
   )
 }

@@ -2766,7 +2766,7 @@ select {
 /* 動畫（遊戲化回饋）                                                       */
 /* 選配：設定選「遊戲化」才開（<html data-motion="game">），預設是原本的樣子    */
 /* 字卡是新功能，翻面動畫一直都有                                             */
-/* 全部 150–300ms，只動 transform / opacity（進度條是 12px 高的小條，用 width） */
+/* 全部 160–450ms，只動 transform / opacity（進度條是 12px 高的小條，用 width） */
 /* 「減少動態效果」時在最後統一關掉                                           */
 /* ===================================================================== */
 
@@ -2774,6 +2774,11 @@ select {
   --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
   /* 稍微衝過頭再回來，像彈簧 */
   --ease-spring: cubic-bezier(0.3, 1.3, 0.55, 1);
+}
+
+/* 遊戲化時按鈕按下去、彈回來慢一點，看得到「按下去」的感覺（原本的樣子維持 80ms） */
+:root[data-motion='game'] {
+  --press: 160ms;
 }
 
 /* ---- 滾動數字：每位數是一條 0–9 的直條 ---- */
@@ -2800,7 +2805,7 @@ select {
   right: 0;
   text-align: center;
   transform: translateY(calc(var(--d) * -1.15em));
-  transition: transform 300ms var(--ease-spring);
+  transition: transform 420ms var(--ease-spring);
 }
 
 /* ---- 進度條 ---- */
@@ -2842,16 +2847,16 @@ select {
   }
 }
 :root[data-motion='game'] .choice.right {
-  animation: pop 240ms var(--ease-spring);
+  animation: pop 380ms var(--ease-spring);
 }
 :root[data-motion='game'] .choice.wrong {
-  animation: shake 300ms ease-in-out;
+  animation: shake 440ms ease-in-out;
 }
 :root[data-motion='game'] .wresult.good {
-  animation: pop 240ms var(--ease-spring);
+  animation: pop 380ms var(--ease-spring);
 }
 :root[data-motion='game'] .wresult.bad {
-  animation: shake 300ms ease-in-out;
+  animation: shake 440ms ease-in-out;
 }
 
 /* ---- 字卡：點一下翻面，左右滑動換張 ---- */
@@ -2993,7 +2998,7 @@ select {
   border: 2px solid var(--edge);
   box-shadow: 0 3px 0 var(--edge);
   pointer-events: none;
-  transition: transform 260ms var(--ease-spring);
+  transition: transform 380ms var(--ease-spring);
 }
 .nav-ind.instant {
   transition: none;
