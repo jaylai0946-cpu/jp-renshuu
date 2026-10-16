@@ -14,6 +14,7 @@ import { speak } from './lib/speech'
 import {
   buildRound,
   makeQuestion,
+  retryPosition,
   streak,
   type QueueEntry,
   type Question,
@@ -149,8 +150,8 @@ export function useRound(state: AppState, setState: (fn: (s: AppState) => AppSta
 
       setRound({
         ...round,
-        // 答錯就在回合尾巴再排一次，同一題不重複補考
-        queue: !ok && !isRetry ? [...round.queue, { kind: 'quiz', id: q.id, retry: true }] : round.queue,
+        // 答錯就在回合尾巴再排一次（不跟同一個字相鄰），同一題不重複補考
+        queue: !ok && !isRetry ? withRetry(round.queue, round.idx, q.id) : round.queue,
         first: isFirst ? { ...round.first, [q.id]: ok } : round.first,
         answered: true,
         picked: choice,
@@ -216,4 +217,9 @@ export function useRound(state: AppState, setState: (fn: (s: AppState) => AppSta
   const clearSummary = useCallback(() => setSummary(null), [])
 
   return { round, summary, start, learn, answer, write, next, skip, quit, replay, clearSummary }
+}
+
+function withRetry(queue: QueueEntry[], idx: number, id: string): QueueEntry[] {
+  const pos = retryPosition(queue, idx, id)
+  return [...queue.slice(0, pos), { kind: 'quiz', id, retry: true }, ...queue.slice(pos)]
 }

@@ -14,7 +14,9 @@ import {
   newProgress,
   nextNew,
   practiced,
+  retryPosition,
   schedule,
+  spreadOut,
   streak,
   todayCounts,
   writeDueIds,
@@ -432,5 +434,45 @@ describe('streak', () => {
   it('只有手寫也算有練', () => {
     expect(practiced({ n: 0, c: 0, xp: 0, w: 0, h: 3 })).toBe(true)
     expect(practiced({ n: 0, c: 0, xp: 0, w: 0, h: 0 })).toBe(false)
+  })
+})
+
+describe('同一個字不連著出兩題', () => {
+  const adjacent = (q: { id: string }[]) => q.filter((e, i) => i > 0 && q[i - 1].id === e.id).length
+  const q = (id: string) => ({ kind: 'quiz' as const, id })
+
+  it('每日練習：換很多種亂數，新字的兩題都不會洗到隔壁', () => {
+    const state = withItems({})
+    state.settings.newPerDay = 10
+    for (let seed = 1; seed <= 200; seed++) {
+      const queue = buildRound(state, { kind: 'daily' }, TODAY, seeded(seed)).filter((e) => e.kind !== 'intro')
+      expect(adjacent(queue), `seed ${seed}`).toBe(0)
+    }
+  })
+
+  it('再學 5 個、單元練習也一樣', () => {
+    for (let seed = 1; seed <= 100; seed++) {
+      for (const opt of [{ kind: 'extra' as const }, { kind: 'unit' as const, unitId: 'v1' }]) {
+        const queue = buildRound(emptyState(), opt, TODAY, seeded(seed)).filter((e) => e.kind !== 'intro')
+        expect(adjacent(queue), `${opt.kind} seed ${seed}`).toBe(0)
+      }
+    }
+  })
+
+  it('spreadOut：排得開就排開，接縫也不撞；只剩同一個字才相鄰', () => {
+    expect(spreadOut([q('a'), q('a'), q('b')]).map((e) => e.id)).toEqual(['a', 'b', 'a'])
+    expect(spreadOut([q('a'), q('b')], 'a').map((e) => e.id)).toEqual(['b', 'a'])
+    expect(spreadOut([q('a'), q('a')]).map((e) => e.id)).toEqual(['a', 'a'])
+    expect(spreadOut([q('a'), q('a'), q('a'), q('b'), q('b')]).map((e) => e.id)).toEqual(['a', 'b', 'a', 'b', 'a'])
+  })
+
+  it('答錯的補考題：最後一題剛好是同一個字就往前挪', () => {
+    const queue = [q('a'), q('b'), q('c'), q('a')]
+    // 正在答第 0 題（a）答錯
+    expect(retryPosition(queue, 0, 'a')).toBe(2)
+    // 一般情況照舊排到最後
+    expect(retryPosition([q('a'), q('b'), q('c')], 0, 'a')).toBe(3)
+    // 已經是最後一題，只能接在後面
+    expect(retryPosition([q('b'), q('a')], 1, 'a')).toBe(2)
   })
 })

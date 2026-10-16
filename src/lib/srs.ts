@@ -204,15 +204,57 @@ export function buildRound(
   // 單元練習和「再學 5 個」也照分批：先連續介紹，再出題
   return [
     ...fresh.map((id): QueueEntry => ({ kind: 'intro', id })),
-    ...shuffle(
-      [
-        ...review.map((id): QueueEntry => ({ kind: 'quiz', id })),
-        ...fresh.map((id): QueueEntry => ({ kind: 'quiz', id })),
-        ...writes.map((id): QueueEntry => ({ kind: 'write', id })),
-      ],
-      rand,
+    ...spreadOut(
+      shuffle(
+        [
+          ...review.map((id): QueueEntry => ({ kind: 'quiz', id })),
+          ...fresh.map((id): QueueEntry => ({ kind: 'quiz', id })),
+          ...writes.map((id): QueueEntry => ({ kind: 'write', id })),
+        ],
+        rand,
+      ),
+      fresh.at(-1),
     ),
   ]
+}
+
+/**
+ * 打散之後再排一次，讓同一個字不要連著出兩題（例如新字的兩題剛好洗到隔壁）。
+ *
+ * 照原本洗好的順序一個一個拿，跳過跟上一題同一個字的；某個字多到不先排它
+ * 後面就會撞在一起時才優先排它。真的排不開（整批只剩同一個字）才允許相鄰。
+ * prevId 是這批前面接的那一題，接縫處也不要撞。
+ */
+export function spreadOut(entries: QueueEntry[], prevId?: string): QueueEntry[] {
+  const rest = [...entries]
+  const out: QueueEntry[] = []
+  let last = prevId
+  while (rest.length) {
+    const counts = new Map<string, number>()
+    for (const e of rest) if (e.id !== last) counts.set(e.id, (counts.get(e.id) ?? 0) + 1)
+    // 剩下的題目裡某個字佔了一半以上，不先排它後面就會撞在一起
+    const [topId, top] = [...counts].reduce((a, b) => (b[1] > a[1] ? b : a), ['', 0])
+    let pick =
+      top && top >= (rest.length + 1) / 2
+        ? rest.findIndex((e) => e.id === topId)
+        : rest.findIndex((e) => e.id !== last)
+    if (pick < 0) pick = 0
+    const [e] = rest.splice(pick, 1)
+    out.push(e)
+    last = e.id
+  }
+  return out
+}
+
+/**
+ * 答錯的補考題排在哪。原則上排到回合最後；但最後一題剛好是同一個字的話往前挪，
+ * 免得連著兩題都是它。往前挪不到（後面沒別的題了）才接在最後。
+ */
+export function retryPosition(queue: QueueEntry[], idx: number, id: string): number {
+  for (let pos = queue.length; pos > idx + 1; pos--) {
+    if (queue[pos - 1].id !== id && queue[pos]?.id !== id) return pos
+  }
+  return queue.length
 }
 
 function chunk<T>(items: T[], size: number): T[][] {
@@ -251,17 +293,20 @@ function buildDaily(state: AppState, today: string, rand: Rng): QueueEntry[] {
       for (const id of batch) block.push({ kind: 'quiz', id })
     }
     for (const id of remaining.splice(0, perBatch)) block.push({ kind: 'quiz', id })
-    queue.push(...shuffle(block, rand))
+    queue.push(...spreadOut(shuffle(block, rand), queue.at(-1)?.id))
   }
 
   // 沒有新字時，複習題和默寫題就是全部；有新字時這裡是分不完的餘數
   queue.push(
-    ...shuffle(
-      [
-        ...remaining.map((id): QueueEntry => ({ kind: 'quiz', id })),
-        ...writes.map((id): QueueEntry => ({ kind: 'write', id })),
-      ],
-      rand,
+    ...spreadOut(
+      shuffle(
+        [
+          ...remaining.map((id): QueueEntry => ({ kind: 'quiz', id })),
+          ...writes.map((id): QueueEntry => ({ kind: 'write', id })),
+        ],
+        rand,
+      ),
+      queue.at(-1)?.id,
     ),
   )
   return queue
