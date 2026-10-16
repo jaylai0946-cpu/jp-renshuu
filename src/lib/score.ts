@@ -1,5 +1,5 @@
 import { distance, resample, type InkPoint, type Point } from './path'
-import { SAMPLES_PER_STROKE, STROKE_PATHS, templateFor, toKanjiVGSpace } from './strokes'
+import { KANJIVG_SIZE, SAMPLES_PER_STROKE, STROKE_PATHS, templateFor, toKanjiVGSpace } from './strokes'
 import { thresholdsFor, type Thresholds } from './thresholds'
 
 export type Verdict = 'ok' | 'shape' | 'bad'
@@ -168,23 +168,55 @@ function meanDistance(a: Point[], b: Point[]): number {
 }
 
 /**
- * 寫出來的東西最像哪個相似字，比目標近了多少（KanjiVG 座標的平均距離）。
- * 沒有比目標更像的就回 null。
+ * 整個字縮放、平移到同樣大小、置中（保持長寬比、各筆的相對位置）。
+ *
+ * 比相似字時用：寫得比範本小、或整個偏到一邊，絕對位置一比就可能剛好靠近
+ * 另一個字的範本（小一號、偏上的「ら」離「う」的範本比較近）。對齊之後比的才是形狀。
+ * 位置寫得好不好由逐筆的起筆、形狀判分負責，不在這裡管。
+ */
+const NORMAL_SIZE = 80
+const normalCache = new Map<string, Point[][]>()
+
+export function normalizeChar(strokes: Point[][]): Point[][] {
+  const all = strokes.flat()
+  if (!all.length) return strokes
+  const xs = all.map((p) => p.x)
+  const ys = all.map((p) => p.y)
+  const [minX, maxX, minY, maxY] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)]
+  const k = NORMAL_SIZE / Math.max(maxX - minX, maxY - minY, 1)
+  const cx = (minX + maxX) / 2
+  const cy = (minY + maxY) / 2
+  const half = KANJIVG_SIZE / 2
+  return strokes.map((st) => st.map((p) => ({ x: half + (p.x - cx) * k, y: half + (p.y - cy) * k })))
+}
+
+function normalTemplate(ch: string): Point[][] {
+  let t = normalCache.get(ch)
+  if (!t) normalCache.set(ch, (t = normalizeChar(templateFor(ch))))
+  return t
+}
+
+/**
+ * 寫出來的東西最像哪個相似字，比目標近了多少（大小、位置對齊之後的平均距離）。
+ * 沒有比目標更像的就回 null。perStroke 是跟那個字逐筆的距離（原座標），畫布標紅用。
  */
 function closestConfusable(
   ch: string,
   user: Point[][],
   own: StrokeScore[],
 ): { ch: string; margin: number; perStroke: number[] } | null {
-  const target = own.reduce((n, s) => n + s.shapeDistance, 0) / own.length
+  const shape = normalizeChar(user)
+  const avg = (t: Point[][]) => t.reduce((n, ts, i) => n + meanDistance(shape[i], ts), 0) / t.length
+  const target = avg(normalTemplate(ch))
   let best: { ch: string; margin: number; perStroke: number[] } | null = null
   for (const c of confusablesOf(ch)) {
-    const perStroke = templateFor(c).map((t, i) => meanDistance(user[i], t))
-    const d = perStroke.reduce((n, x) => n + x, 0) / perStroke.length
-    const margin = target - d
-    if (margin > 0 && (!best || margin > best.margin)) best = { ch: c, margin, perStroke }
+    const margin = target - avg(normalTemplate(c))
+    if (margin > 0 && (!best || margin > best.margin)) {
+      best = { ch: c, margin, perStroke: templateFor(c).map((t, i) => meanDistance(user[i], t)) }
+    }
   }
-  return best
+  // own 只用來對齊筆數；逐筆分數已經在 scoreStroke 算過
+  return own.length === user.length ? best : null
 }
 
 function scoreStroke(user: Point[], template: Point[], t: Thresholds): StrokeScore {

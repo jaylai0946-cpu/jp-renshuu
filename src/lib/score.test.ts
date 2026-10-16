@@ -232,6 +232,28 @@ describe('相似字', () => {
     expect(wrongly).toEqual([])
   })
 
+  it('寫得比範本小、偏上的「ら」不會被說成「う」（使用者回報的實際筆跡）', () => {
+    // iPad 截圖量出來的座標，畫布 665px
+    const px = 665
+    const ink = (pts: number[][]) => pts.map(([x, y]) => ({ x: x - 528, y: y - 338, pressure: 0.5 }))
+    const user = [
+      ink([[828, 510], [890, 543], [855, 560]]),
+      ink([[812, 612], [812, 697], [860, 665], [905, 655], [945, 690], [940, 740], [900, 780], [860, 790], [808, 778]]),
+    ]
+    for (const t of [PEN, FINGER]) {
+      const score = scoreCharacter('ら', user, px, t)
+      expect(score.confusedWith).toBeUndefined()
+      expect(score.verdict).not.toBe('bad')
+    }
+  })
+
+  it('整個字縮小、平移之後，相似字還是照形狀判：寫成 う 抓得到，寫對的 ら 不冤枉', () => {
+    const small = (p: Point) => ({ x: 30 + p.x * 0.6, y: 20 + p.y * 0.6 })
+    expect(scoreCharacter('ら', trace('う', small), SIZE, FINGER).confusedWith).toBe('う')
+    expect(scoreCharacter('ら', trace('ら', small), SIZE, FINGER).confusedWith).toBeUndefined()
+    expect(scoreCharacter('ね', trace('れ', small), SIZE, FINGER).confusedWith).toBe('れ')
+  })
+
   it('小字不跟自己的大字比（ゃ／や 是同一個字）', () => {
     const score = scoreCharacter('ゃ', trace('や'), SIZE, PEN)
     expect(score.confusedWith).not.toBe('や')
