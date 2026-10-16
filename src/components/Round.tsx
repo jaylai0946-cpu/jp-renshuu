@@ -6,7 +6,7 @@ import { HAPTIC_SWITCH_ID } from '../lib/haptics'
 import type { Verdict } from '../lib/score'
 import { Cells } from './Cells'
 import { HapticSwitch } from './HapticSwitch'
-import { Icon } from './ui'
+import { ComboPill, Icon } from './ui'
 import { WritingPad } from './WritingPad'
 
 interface Props {
@@ -96,12 +96,7 @@ export function Round({ round, state, onLearn, onAnswer, onWrite, onNext, onSkip
       <span className="rcount">
         {round.idx} / {round.queue.length}
       </span>
-      {round.combo > 0 ? (
-        <span className="pill pill-orange" aria-label={`連對 ${round.combo} 題`}>
-          <Icon name="flame" />
-          {round.combo}
-        </span>
-      ) : null}
+      {round.combo > 0 ? <ComboPill combo={round.combo} /> : null}
     </div>
   )
 

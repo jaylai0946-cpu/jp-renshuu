@@ -3,6 +3,7 @@ import { UNITS } from '../data/units'
 import { currentUnit } from '../lib/srs'
 import type { AppState, Unit } from '../types'
 import { unitColor, unitGlyph } from '../lib/unitStyle'
+import { Flashcards } from './Flashcards'
 import { Bar, PageHead, SyncDot, Tile } from './ui'
 
 interface Props {
@@ -24,9 +25,22 @@ const FILTERS: { id: Filter; label: string; match: (u: Unit) => boolean }[] = [
 
 export function Units({ state, syncText, syncOk, onPractice, onMarkKnown }: Props) {
   const [filter, setFilter] = useState<Filter>('all')
+  const [deck, setDeck] = useState<Unit | null>(null)
   const current = currentUnit(state)
   const learned = Object.keys(state.items).length
   const shown = UNITS.filter(FILTERS.find((f) => f.id === filter)!.match)
+
+  if (deck) {
+    return (
+      <Flashcards
+        unit={deck}
+        onBack={() => {
+          setDeck(null)
+          window.scrollTo(0, 0)
+        }}
+      />
+    )
+  }
 
   return (
     <>
@@ -109,6 +123,16 @@ export function Units({ state, syncText, syncOk, onPractice, onMarkKnown }: Prop
               <div className="row">
                 <button type="button" className="btn btn-ink" onClick={() => onPractice(u.id)}>
                   練習這個單元
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-soft"
+                  onClick={() => {
+                    setDeck(u)
+                    window.scrollTo(0, 0)
+                  }}
+                >
+                  翻字卡
                 </button>
                 {seen < total ? (
                   <button type="button" className="btn btn-soft" onClick={() => onMarkKnown(u.id)}>

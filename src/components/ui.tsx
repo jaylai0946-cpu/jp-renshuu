@@ -1,4 +1,5 @@
-import type { ReactNode } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { bump, prefersReducedMotion } from '../lib/motion'
 
 /*
  * A 版設計的共用小元件：線條圖示、膠囊、單元色塊。
@@ -115,21 +116,64 @@ export function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
   }
 }
 
-export function StreakPill({ days, suffix }: { days: number; suffix?: string }) {
+/**
+ * 滾動的數字：每一位數是一條 0–9 的直條，數字變了就滑到新的位置（像計分板）。
+ *
+ * 直條用 CSS ::after 畫，所以 DOM 的文字還是乾淨的數字（螢幕閱讀器、測試讀得到）。
+ * 位數從右邊算 key，9 → 10 時個位數那條會滑、十位數那條新長出來。
+ */
+export function AnimatedNumber({ value }: { value: number }) {
+  const digits = [...String(Math.max(0, Math.round(value)))]
   return (
-    <span className="pill pill-orange" aria-label={`連續 ${days} 天`}>
+    <span className="anum">
+      {digits.map((d, i) => (
+        <span className="anum-d" key={digits.length - i} style={{ '--d': d } as CSSProperties}>
+          {d}
+        </span>
+      ))}
+    </span>
+  )
+}
+
+/** 數字變大時整顆膠囊彈一下 */
+function useBumpOnIncrease(value: number) {
+  const ref = useRef<HTMLSpanElement>(null)
+  const prev = useRef(value)
+  useEffect(() => {
+    if (value > prev.current) bump(ref.current)
+    prev.current = value
+  }, [value])
+  return ref
+}
+
+export function StreakPill({ days, suffix }: { days: number; suffix?: string }) {
+  const ref = useBumpOnIncrease(days)
+  return (
+    <span ref={ref} className="pill pill-orange" aria-label={`連續 ${days} 天`}>
       <Icon name="flame" />
-      {days}
+      <AnimatedNumber value={days} />
       {suffix}
     </span>
   )
 }
 
 export function XpPill({ xp }: { xp: number }) {
+  const ref = useBumpOnIncrease(xp)
   return (
-    <span className="pill pill-yellow" aria-label={`總點數 ${xp}`}>
+    <span ref={ref} className="pill pill-yellow" aria-label={`總點數 ${xp}`}>
       <Icon name="coin" />
-      {xp}
+      <AnimatedNumber value={xp} />
+    </span>
+  )
+}
+
+/** 回合裡的連對火焰 */
+export function ComboPill({ combo }: { combo: number }) {
+  const ref = useBumpOnIncrease(combo)
+  return (
+    <span ref={ref} className="pill pill-orange" aria-label={`連對 ${combo} 題`}>
+      <Icon name="flame" />
+      <AnimatedNumber value={combo} />
     </span>
   )
 }
@@ -164,12 +208,24 @@ export function Tile({
   )
 }
 
-/** 帶墨框的進度條 */
+/**
+ * 帶墨框的進度條。第一次出現時從 0 滑到目前的值，之後數值變了也平滑地滑過去。
+ */
 export function Bar({ parts, label, thin }: { parts: { pct: number; color: string }[]; label?: string; thin?: boolean }) {
+  const [shown, setShown] = useState(prefersReducedMotion)
+  useEffect(() => {
+    if (shown) return
+    // 先畫一次 0，下一個畫格再給真的值，transition 才有起點
+    const id = requestAnimationFrame(() => setShown(true))
+    return () => cancelAnimationFrame(id)
+  }, [shown])
   return (
     <div className={`bar${thin ? ' thin' : ''}`} role={label ? 'img' : undefined} aria-label={label}>
       {parts.map((p, i) => (
-        <i key={i} style={{ width: `${Math.max(0, Math.min(100, p.pct))}%`, background: p.color }} />
+        <i
+          key={i}
+          style={{ width: `${shown ? Math.max(0, Math.min(100, p.pct)) : 0}%`, background: p.color }}
+        />
       ))}
     </div>
   )

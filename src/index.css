@@ -2761,3 +2761,267 @@ select {
     gap: 14px;
   }
 }
+
+/* ===================================================================== */
+/* 動畫（遊戲化回饋）                                                       */
+/* 全部 150–300ms，只動 transform / opacity（進度條是 12px 高的小條，用 width） */
+/* 「減少動態效果」時在最後統一關掉                                           */
+/* ===================================================================== */
+
+:root {
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  /* 稍微衝過頭再回來，像彈簧 */
+  --ease-spring: cubic-bezier(0.3, 1.3, 0.55, 1);
+}
+
+/* ---- 滾動數字：每位數是一條 0–9 的直條 ---- */
+.anum {
+  display: inline-flex;
+  font-variant-numeric: tabular-nums;
+}
+.anum-d {
+  position: relative;
+  display: inline-block;
+  height: 1.15em;
+  line-height: 1.15em;
+  overflow: hidden;
+  /* 真的數字只用來撐寬度和給螢幕閱讀器，畫面上看到的是 ::after 的直條 */
+  visibility: hidden;
+}
+.anum-d::after {
+  content: '0\A 1\A 2\A 3\A 4\A 5\A 6\A 7\A 8\A 9';
+  white-space: pre;
+  visibility: visible;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  text-align: center;
+  transform: translateY(calc(var(--d) * -1.15em));
+  transition: transform 300ms var(--ease-spring);
+}
+
+/* ---- 進度條 ---- */
+.bar i {
+  transition: width 300ms var(--ease-out);
+}
+.prog i {
+  transition: width 280ms var(--ease-out);
+}
+
+/* ---- 答對彈一下、答錯晃一下 ---- */
+@keyframes pop {
+  0% {
+    transform: scale(1);
+  }
+  45% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@keyframes shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-7px);
+  }
+  40% {
+    transform: translateX(6px);
+  }
+  60% {
+    transform: translateX(-4px);
+  }
+  80% {
+    transform: translateX(3px);
+  }
+}
+.choice.right {
+  animation: pop 240ms var(--ease-spring);
+}
+.choice.wrong {
+  animation: shake 300ms ease-in-out;
+}
+.wresult.good {
+  animation: pop 240ms var(--ease-spring);
+}
+.wresult.bad {
+  animation: shake 300ms ease-in-out;
+}
+
+/* ---- 字卡：點一下翻面，左右滑動換張 ---- */
+.fdeck {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+}
+.fcard {
+  width: min(100%, 340px);
+  height: 380px;
+  perspective: 1200px;
+  /* 直向捲動交給瀏覽器，橫向拖曳自己處理 */
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: grab;
+}
+.fcard:active {
+  cursor: grabbing;
+}
+.fcard:focus-visible {
+  outline: 3px solid var(--blue-text);
+  outline-offset: 6px;
+  border-radius: 30px;
+}
+.fcard-in {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transition: transform 300ms var(--ease-out);
+}
+.fcard.flipped .fcard-in {
+  transform: rotateY(180deg);
+}
+.fcard-face {
+  position: absolute;
+  inset: 0;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  border-radius: 28px;
+  background: var(--surface);
+  border: 2px solid var(--edge);
+  box-shadow: 0 6px 0 var(--edge);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px;
+  text-align: center;
+}
+.fcard-face.back {
+  transform: rotateY(180deg);
+  background: var(--paper);
+}
+.fcard .big {
+  font-family: var(--kyoka);
+  font-weight: 600;
+  font-size: 128px;
+  line-height: 1;
+}
+.fcard .big.word {
+  font-size: 56px;
+}
+.fcard .big.two {
+  font-size: 96px;
+}
+.fcard .ro {
+  font-family: var(--num);
+  font-weight: 700;
+  font-size: 40px;
+  color: var(--blue-text);
+}
+.fcard .kana {
+  font-family: var(--jp);
+  font-size: 22px;
+  color: var(--muted);
+}
+.fcard .zh {
+  font-size: 24px;
+  font-weight: 900;
+}
+.fcard .hint {
+  position: absolute;
+  bottom: 18px;
+  font-size: 13px;
+  color: var(--faint);
+}
+/* 換張：從滑動的那一側進來 */
+@keyframes fenter-next {
+  from {
+    transform: translateX(48px);
+    opacity: 0;
+  }
+}
+@keyframes fenter-prev {
+  from {
+    transform: translateX(-48px);
+    opacity: 0;
+  }
+}
+.fcard.enter-next {
+  animation: fenter-next 220ms var(--ease-out);
+}
+.fcard.enter-prev {
+  animation: fenter-prev 220ms var(--ease-out);
+}
+.fnav {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+.fnav-btn {
+  width: 52px;
+  height: 52px;
+  padding: 0;
+}
+.fnav .count {
+  font-family: var(--num);
+  font-weight: 600;
+  color: var(--muted);
+  min-width: 64px;
+  text-align: center;
+}
+
+/* ---- 分頁：選中的方塊滑到新分頁 ---- */
+.nav-in {
+  position: relative;
+}
+.nav-ind {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 0;
+  background: var(--coral);
+  border: 2px solid var(--edge);
+  box-shadow: 0 3px 0 var(--edge);
+  pointer-events: none;
+  transition: transform 260ms var(--ease-spring);
+}
+.nav-ind.instant {
+  transition: none;
+}
+.nav .g {
+  position: relative;
+  z-index: 1;
+}
+/* 有滑動方塊時，選中的那格自己不畫底色，讓方塊從底下滑過來 */
+.nav-in.has-ind button[aria-current='page'] .g {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  transition: color 160ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .anum-d::after,
+  .bar i,
+  .prog i,
+  .fcard-in,
+  .nav-ind {
+    transition: none;
+  }
+  .choice.right,
+  .choice.wrong,
+  .wresult.good,
+  .wresult.bad,
+  .fcard.enter-next,
+  .fcard.enter-prev {
+    animation: none;
+  }
+}
